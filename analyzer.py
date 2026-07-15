@@ -13,26 +13,35 @@ class StrategyAnalyzer:
         
         # Load não AI nếu có
         self.model = None
-        if os.path.exists('rf_model.pkl'):
+        if os.path.exists('xgb_model.pkl'):
             try:
-                self.model = joblib.load('rf_model.pkl')
+                self.model = joblib.load('xgb_model.pkl')
             except Exception as e:
                 print(f"Lỗi load AI: {e}")
 
-    def analyze(self, df_5m, df_1h):
+    def analyze(self, df_5m, df_15m, df_1h, df_4h):
         """
-        Nhận DataFrame nến 5m và 1H, tính toán chỉ báo Đa khung thời gian.
+        Nhận DataFrame nến 5m, 15m, 1H và 4H, tính toán chỉ báo Đa khung thời gian.
         """
-        if df_5m is None or len(df_5m) < self.ema_long or df_1h is None or len(df_1h) < 50:
+        if df_5m is None or len(df_5m) < self.ema_long or df_1h is None or len(df_1h) < 50 or df_15m is None or df_4h is None:
             return None
 
-        # --- 1. TÍNH TOÁN KHUNG 1H ---
+        # --- 1. TÍNH TOÁN KHUNG 15M, 1H, 4H ---
+        df_15m['ema_21'] = ta.trend.ema_indicator(df_15m['close'], window=21)
+        df_15m['ema_50'] = ta.trend.ema_indicator(df_15m['close'], window=50)
+        trend_15m_bullish = df_15m.iloc[-2]['ema_21'] > df_15m.iloc[-2]['ema_50']
+        
         df_1h['ema_21'] = ta.trend.ema_indicator(df_1h['close'], window=21)
         df_1h['ema_50'] = ta.trend.ema_indicator(df_1h['close'], window=50)
+        trend_1h_bullish = df_1h.iloc[-2]['ema_21'] > df_1h.iloc[-2]['ema_50']
         
-        last_1h = df_1h.iloc[-2]
-        trend_1h_bullish = last_1h['ema_21'] > last_1h['ema_50']
-        trend_1h_bearish = last_1h['ema_21'] < last_1h['ema_50']
+        df_4h['ema_21'] = ta.trend.ema_indicator(df_4h['close'], window=21)
+        df_4h['ema_50'] = ta.trend.ema_indicator(df_4h['close'], window=50)
+        trend_4h_bullish = df_4h.iloc[-2]['ema_21'] > df_4h.iloc[-2]['ema_50']
+
+        # Đồng thuận khung lớn (15m, 1h, 4h)
+        mtf_bullish = trend_15m_bullish and trend_1h_bullish and trend_4h_bullish
+        mtf_bearish = not trend_15m_bullish and not trend_1h_bullish and not trend_4h_bullish
 
         # --- 2. TÍNH TOÁN KHUNG 5M ---
         df = df_5m.copy()
@@ -50,6 +59,14 @@ class StrategyAnalyzer:
         df['macd'] = macd.macd()
         df['macd_signal'] = macd.macd_signal()
 
+        
+        # 2.3 ADX & Bollinger Bands
+        adx_indicator = ta.trend.ADXIndicator(df['high'], df['low'], df['close'], window=14)
+        df['adx'] = adx_indicator.adx()
+        
+        bb_indicator = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_upper'] = bb_indicator.bollinger_hband()
+        df['bb_lower'] = bb_indicator.bollinger_lband()
         
         # ATR cho biến động giá (dùng cho SL/TP)
         atr_indicator = ta.volatility.AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=self.atr_period)
@@ -73,22 +90,25 @@ class StrategyAnalyzer:
         obv_increasing = last_closed_candle['obv'] > prev_candle['obv']
         obv_decreasing = last_closed_candle['obv'] < prev_candle['obv']
 
-        # Điều kiện LONG: 1H Tăng + 5m Tăng + OBV Tăng + RSI < 45
-        if trend_1h_bullish and trend_5m_bullish:
-            ema_trend = "Tăng (Đồng thuận 1H & 5m)"
+        # Điều kiện LONG: Đồng thuận MTF + 5m Tăng + OBV Tăng
+        if mtf_bullish and trend_5m_bullish:
+            ema_trend = "Tăng (Đồng thuận 5m,15m,1h,4h)"
             if last_closed_candle['low'] <= last_closed_candle['ema_21'] and last_closed_candle['close'] > last_closed_candle['ema_21']:
                 if obv_increasing:
                     signal = "LONG"
 
-        # Điều kiện SHORT: 1H Giảm + 5m Giảm + OBV Giảm + RSI > 55
-        elif trend_1h_bearish and trend_5m_bearish:
-            ema_trend = "Giảm (Đồng thuận 1H & 5m)"
+        # Điều kiện SHORT: Đồng thuận MTF + 5m Giảm + OBV Giảm
+        elif mtf_bearish and trend_5m_bearish:
+            ema_trend = "Giảm (Đồng thuận 5m,15m,1h,4h)"
             if last_closed_candle['high'] >= last_closed_candle['ema_21'] and last_closed_candle['close'] < last_closed_candle['ema_21']:
                 if obv_decreasing:
                     signal = "SHORT"
                     
-        # --- BỘ LỌC AI (V3.0) ---
+        # --- BỘ LỌC AI (V4.0) ---
         if signal and self.model is not None:
+            bb_range = last_closed_candle['bb_upper'] - last_closed_candle['bb_lower']
+            bb_pos = (last_closed_candle['close'] - last_closed_candle['bb_lower']) / bb_range if bb_range != 0 else 0
+            
             feature = [
                 last_closed_candle['rsi'],
                 last_closed_candle['macd'],
@@ -96,9 +116,14 @@ class StrategyAnalyzer:
                 last_closed_candle['atr'] / last_closed_candle['close'],
                 (last_closed_candle['close'] - last_closed_candle['ema_21']) / last_closed_candle['ema_21'],
                 (last_closed_candle['ema_21'] - last_closed_candle['ema_50']) / last_closed_candle['ema_50'],
-                last_closed_candle['obv_diff'] / last_closed_candle['volume'] if last_closed_candle['volume'] != 0 else 0
+                last_closed_candle['obv_diff'] / last_closed_candle['volume'] if last_closed_candle['volume'] != 0 else 0,
+                last_closed_candle['adx'],
+                bb_pos,
+                1 if trend_15m_bullish else 0,
+                1 if trend_1h_bullish else 0,
+                1 if trend_4h_bullish else 0
             ]
-            feature_df = pd.DataFrame([feature], columns=['rsi', 'macd', 'macd_sig', 'atr_rel', 'dist_ema21', 'dist_emas', 'obv_rel'])
+            feature_df = pd.DataFrame([feature], columns=['rsi', 'macd', 'macd_sig', 'atr_rel', 'dist_ema21', 'dist_emas', 'obv_rel', 'adx', 'bb_pos', 'trend_15m', 'trend_1h', 'trend_4h'])
             win_prob = self.model.predict_proba(feature_df)[0][1] # Xác suất Win (Class 1)
             
             ema_trend += f" | AI_Win_Prob: {win_prob*100:.1f}%"

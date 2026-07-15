@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 schedule==1.2.2
 scikit-learn
 joblib
+xgboost

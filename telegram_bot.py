@@ -9,6 +9,8 @@ class TelegramNotifier:
         self.token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
         self.api_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        self.get_updates_url = f"https://api.telegram.org/bot{self.token}/getUpdates"
+        self.last_update_id = None
 
     def send_signal(self, symbol, signal_type, entry, tp, sl, rsi, ema_trend):
         """
@@ -60,3 +62,29 @@ class TelegramNotifier:
             requests.post(self.api_url, json=payload)
         except Exception as e:
             print(f"Lỗi gửi tin nhắn Telegram: {e}")
+
+    def check_commands(self):
+        """
+        Lắng nghe và phản hồi lệnh từ người dùng (vd: /ping)
+        """
+        if not self.token or not self.chat_id:
+            return
+
+        params = {"timeout": 1}
+        if self.last_update_id:
+            params["offset"] = self.last_update_id + 1
+
+        try:
+            response = requests.get(self.get_updates_url, params=params).json()
+            if response.get("ok"):
+                for result in response.get("result", []):
+                    self.last_update_id = result["update_id"]
+                    
+                    message = result.get("message", {})
+                    text = message.get("text", "")
+                    chat_id = message.get("chat", {}).get("id")
+
+                    if text == "/ping" and str(chat_id) == str(self.chat_id):
+                        self.send_message("🏓 Pong! Bot V3.0 (Có AI) vẫn đang thức trắng đêm quét tín hiệu cho sếp đây!")
+        except Exception:
+            pass

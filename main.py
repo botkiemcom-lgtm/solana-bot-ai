@@ -27,12 +27,13 @@ def run_bot_job():
     analyzer = StrategyAnalyzer()
     notifier = TelegramNotifier()
 
-    # 2. Lấy dữ liệu
-    df = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="5m", limit=100)
+    # 2. Lấy dữ liệu 5m và 1h
+    df_5m = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="5m", limit=100)
+    df_1h = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="1h", limit=100)
     
-    if df is not None:
-        # 3. Đưa vào bộ não phân tích
-        result = analyzer.analyze(df)
+    if df_5m is not None and df_1h is not None:
+        # 3. Đưa vào bộ não phân tích (V2.0)
+        result = analyzer.analyze(df_5m, df_1h)
         
         # 4. Gửi tín hiệu nếu có
         if result:
@@ -69,9 +70,11 @@ def main():
     schedule.every(5).minutes.do(run_bot_job)
 
     # Vòng lặp giữ bot luôn chạy
+    notifier_listener = TelegramNotifier()
     while True:
         schedule.run_pending()
-        time.sleep(1)
+        notifier_listener.check_commands()
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()

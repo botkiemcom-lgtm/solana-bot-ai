@@ -62,7 +62,7 @@ def run_bot_job():
     else:
         print("❌ Lỗi lấy dữ liệu, sẽ thử lại ở chu kỳ sau.")
         telegram_bot.SYSTEM_STATUS["status"] = "🔴 Lỗi lấy dữ liệu nến"
-        telegram_bot.SYSTEM_STATUS["last_error"] = "Binance API chặn hoặc lỗi mạng"
+        telegram_bot.SYSTEM_STATUS["last_error"] = "API sàn bị lỗi hoặc chặn mạng"
 
 def main():
     print("🤖 Bot Trade Future AI đã khởi động!")

@@ -17,10 +17,7 @@ class BinanceFetcher:
             secret = None
 
         config = {
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'future'
-            }
+            'enableRateLimit': True
         }
         
         # Chỉ truyền API key nếu có key thật
@@ -28,8 +25,8 @@ class BinanceFetcher:
             config['apiKey'] = api_key
             config['secret'] = secret
             
-        # Khởi tạo ccxt binance với cấu hình cho Futures
-        self.exchange = ccxt.binance(config)
+        # Khởi tạo ccxt okx
+        self.exchange = ccxt.okx(config)
 
     def fetch_ohlcv(self, symbol="SOL/USDT", timeframe="5m", limit=100):
         """

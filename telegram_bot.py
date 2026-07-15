@@ -1,8 +1,16 @@
 import os
 import requests
+import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
+
+SYSTEM_STATUS = {
+    "status": "🟡 Đang khởi động...",
+    "last_check": "Chưa có",
+    "last_error": "Không có",
+    "last_signal": "Chưa có"
+}
 
 class TelegramNotifier:
     def __init__(self):
@@ -85,6 +93,15 @@ class TelegramNotifier:
                     chat_id = message.get("chat", {}).get("id")
 
                     if text == "/ping" and str(chat_id) == str(self.chat_id):
-                        self.send_message("🏓 Pong! Bot V3.0 (Có AI) vẫn đang thức trắng đêm quét tín hiệu cho sếp đây!")
+                        self.send_message("🏓 Pong! Bot V4.0 (Có AI) vẫn đang thức trắng đêm quét tín hiệu cho sếp đây!")
+                    elif text == "/status" and str(chat_id) == str(self.chat_id):
+                        msg = (
+                            f"📊 **BÁO CÁO TRẠNG THÁI HỆ THỐNG**\n\n"
+                            f"🔹 **Tình trạng:** {SYSTEM_STATUS['status']}\n"
+                            f"🕒 **Lần quét nến gần nhất:** {SYSTEM_STATUS['last_check']}\n"
+                            f"⚠️ **Lỗi hiện tại:** {SYSTEM_STATUS['last_error']}\n"
+                            f"🔥 **Tín hiệu gần nhất:** {SYSTEM_STATUS['last_signal']}"
+                        )
+                        self.send_message(msg)
         except Exception:
             pass

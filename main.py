@@ -1,10 +1,12 @@
 import time
+import datetime
 import schedule
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from data_fetcher import BinanceFetcher
 from analyzer import StrategyAnalyzer
+import telegram_bot
 from telegram_bot import TelegramNotifier
 
 class DummyServer(BaseHTTPRequestHandler):
@@ -21,6 +23,7 @@ def keep_alive():
 
 def run_bot_job():
     print("🔄 Đang quét dữ liệu SOL/USDT khung 5m...")
+    telegram_bot.SYSTEM_STATUS["last_check"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # 1. Khởi tạo các module
     fetcher = BinanceFetcher()
@@ -34,12 +37,16 @@ def run_bot_job():
     df_4h = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="4h", limit=100)
     
     if df_5m is not None and df_15m is not None and df_1h is not None and df_4h is not None:
+        telegram_bot.SYSTEM_STATUS["status"] = "🟢 Đang hoạt động tốt"
+        telegram_bot.SYSTEM_STATUS["last_error"] = "Không có"
+        
         # 3. Đưa vào bộ não phân tích (V4.0)
         result = analyzer.analyze(df_5m, df_15m, df_1h, df_4h)
         
         # 4. Gửi tín hiệu nếu có
         if result:
             print(f"🔥 Phát hiện tín hiệu {result['signal']}! Đang gửi Telegram...")
+            telegram_bot.SYSTEM_STATUS["last_signal"] = f"{result['signal']} ({telegram_bot.SYSTEM_STATUS['last_check']})"
             notifier.send_signal(
                 symbol="SOL/USDT",
                 signal_type=result['signal'],
@@ -53,6 +60,8 @@ def run_bot_job():
             print("💤 Chưa có tín hiệu đẹp, tiếp tục chờ...")
     else:
         print("❌ Lỗi lấy dữ liệu, sẽ thử lại ở chu kỳ sau.")
+        telegram_bot.SYSTEM_STATUS["status"] = "🔴 Lỗi lấy dữ liệu nến"
+        telegram_bot.SYSTEM_STATUS["last_error"] = "Binance API chặn hoặc lỗi mạng"
 
 def main():
     print("🤖 Bot Trade Future AI đã khởi động!")

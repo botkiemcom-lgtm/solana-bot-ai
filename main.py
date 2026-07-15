@@ -23,7 +23,8 @@ def keep_alive():
 
 def run_bot_job():
     print("🔄 Đang quét dữ liệu SOL/USDT khung 5m...")
-    telegram_bot.SYSTEM_STATUS["last_check"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
+    telegram_bot.SYSTEM_STATUS["last_check"] = vn_time.strftime("%Y-%m-%d %H:%M:%S")
     
     # 1. Khởi tạo các module
     fetcher = BinanceFetcher()

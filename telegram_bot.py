@@ -20,6 +20,19 @@ class TelegramNotifier:
         self.get_updates_url = f"https://api.telegram.org/bot{self.token}/getUpdates"
         self.last_update_id = None
 
+    def setup_commands(self):
+        """Thiết lập Menu các lệnh có sẵn cho Bot"""
+        if not self.token: return
+        url = f"https://api.telegram.org/bot{self.token}/setMyCommands"
+        commands = [
+            {"command": "ping", "description": "Kiểm tra kết nối Bot (Pong)"},
+            {"command": "status", "description": "Xem báo cáo tình trạng hệ thống"}
+        ]
+        try:
+            requests.post(url, json={"commands": commands})
+        except Exception as e:
+            print(f"Lỗi tạo Menu Telegram: {e}")
+
     def send_signal(self, symbol, signal_type, entry, tp, sl, rsi, ema_trend):
         """
         Gửi tin nhắn tín hiệu trade về Telegram

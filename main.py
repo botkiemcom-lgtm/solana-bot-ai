@@ -70,8 +70,9 @@ def main():
     # Khởi chạy server giả để Render không tắt bot
     threading.Thread(target=keep_alive, daemon=True).start()
     
-    # Gửi tin nhắn test khởi động
+    # Gửi tin nhắn test khởi động và cấu hình Menu Telegram
     notifier = TelegramNotifier()
+    notifier.setup_commands()
     notifier.send_message("🟢 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 5m). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
     
     # Chạy ngay lần đầu tiên khi vừa bật bot

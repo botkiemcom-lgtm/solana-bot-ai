@@ -41,24 +41,38 @@ def run_bot_job():
         telegram_bot.SYSTEM_STATUS["status"] = "🟢 Đang hoạt động tốt"
         telegram_bot.SYSTEM_STATUS["last_error"] = "Không có"
         
-        # 3. Đưa vào bộ não phân tích (V4.0 Fast Scalping)
-        result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
-        
-        # 4. Gửi tín hiệu nếu có
-        if result:
-            print(f"🔥 Phát hiện tín hiệu {result['signal']}! Đang gửi Telegram...")
-            telegram_bot.SYSTEM_STATUS["last_signal"] = f"{result['signal']} ({telegram_bot.SYSTEM_STATUS['last_check']})"
-            notifier.send_signal(
-                symbol="SOL/USDT",
-                signal_type=result['signal'],
-                entry=result['entry'],
-                tp=result['tp'],
-                sl=result['sl'],
-                rsi=result['rsi'],
-                ema_trend=result['ema_trend']
-            )
+        # 3. Phân nhánh logic: Đang Gồng Lệnh hay Đang Săn Mồi?
+        if telegram_bot.ACTIVE_TRADE["in_position"]:
+            print(f"🛡️ Đang trong chế độ bảo vệ lệnh {telegram_bot.ACTIVE_TRADE['type']}...")
+            warning = analyzer.monitor_trade(df_5m, df_15m, df_30m, df_1h, telegram_bot.ACTIVE_TRADE)
+            if warning:
+                print("🚨 Cảnh báo từ AI: Phải thoát hàng sớm!")
+                # Thêm Inline Button Dừng Lệnh vào tin nhắn cảnh báo luôn cho sếp dễ bấm
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "🛑 Dừng lệnh (Đã Cắt Lỗ xong)", "callback_data": "STOP_TRADE"}]
+                    ]
+                }
+                notifier.send_message(warning, reply_markup=reply_markup)
         else:
-            print("💤 Chưa có tín hiệu đẹp, tiếp tục chờ...")
+            # Đưa vào bộ não phân tích để săn mồi
+            result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
+            
+            # 4. Gửi tín hiệu nếu có
+            if result:
+                print(f"🔥 Phát hiện tín hiệu {result['signal']}! Đang gửi Telegram...")
+                telegram_bot.SYSTEM_STATUS["last_signal"] = f"{result['signal']} ({telegram_bot.SYSTEM_STATUS['last_check']})"
+                notifier.send_signal(
+                    symbol="SOL/USDT",
+                    signal_type=result['signal'],
+                    entry=result['entry'],
+                    tp=result['tp'],
+                    sl=result['sl'],
+                    rsi=result['rsi'],
+                    ema_trend=result['ema_trend']
+                )
+            else:
+                print("💤 Chưa có tín hiệu đẹp, tiếp tục chờ...")
     else:
         print("❌ Lỗi lấy dữ liệu, sẽ thử lại ở chu kỳ sau.")
         telegram_bot.SYSTEM_STATUS["status"] = "🔴 Lỗi lấy dữ liệu nến"

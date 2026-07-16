@@ -92,14 +92,14 @@ class StrategyAnalyzer:
 
         # Điều kiện LONG: Đồng thuận MTF + 5m Tăng + OBV Tăng
         if mtf_bullish and trend_5m_bullish:
-            ema_trend = "Tăng (Đồng thuận 5m,15m,1h,4h)"
+            ema_trend = "Tăng (Đồng thuận 5m,15m,30m,1h)"
             if last_closed_candle['low'] <= last_closed_candle['ema_21'] and last_closed_candle['close'] > last_closed_candle['ema_21']:
                 if obv_increasing:
                     signal = "LONG"
 
         # Điều kiện SHORT: Đồng thuận MTF + 5m Giảm + OBV Giảm
         elif mtf_bearish and trend_5m_bearish:
-            ema_trend = "Giảm (Đồng thuận 5m,15m,1h,4h)"
+            ema_trend = "Giảm (Đồng thuận 5m,15m,30m,1h)"
             if last_closed_candle['high'] >= last_closed_candle['ema_21'] and last_closed_candle['close'] < last_closed_candle['ema_21']:
                 if obv_decreasing:
                     signal = "SHORT"
@@ -156,3 +156,89 @@ class StrategyAnalyzer:
             }
 
         return None
+
+    def monitor_trade(self, df_5m, df_15m, df_30m, df_1h, active_trade):
+        """
+        Theo dõi lệnh đang gồng để cảnh báo thoát sớm nếu AI thấy thị trường đảo chiều
+        """
+        if df_5m is None or len(df_5m) < self.ema_long or df_1h is None or len(df_1h) < 50 or df_15m is None or df_30m is None:
+            return None
+
+        # Tính EMA 5m
+        df = df_5m.copy()
+        df['ema_9'] = ta.trend.ema_indicator(df['close'], window=self.ema_short)
+        df['ema_21'] = ta.trend.ema_indicator(df['close'], window=self.ema_mid)
+        df['ema_50'] = ta.trend.ema_indicator(df['close'], window=self.ema_long)
+        df['rsi'] = ta.momentum.rsi(df['close'], window=self.rsi_period)
+        df['obv'] = ta.volume.on_balance_volume(df['close'], df['volume'])
+        df['obv_diff'] = df['obv'].diff()
+        
+        macd = ta.trend.MACD(df['close'])
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+        
+        atr_indicator = ta.volatility.AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=self.atr_period)
+        df['atr'] = atr_indicator.average_true_range()
+        
+        adx_indicator = ta.trend.ADXIndicator(df['high'], df['low'], df['close'], window=14)
+        df['adx'] = adx_indicator.adx()
+        
+        bb_indicator = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_upper'] = bb_indicator.bollinger_hband()
+        df['bb_lower'] = bb_indicator.bollinger_lband()
+
+        last_closed_candle = df.iloc[-2]
+        
+        # Đồng thuận khung lớn
+        df_15m['ema_21'] = ta.trend.ema_indicator(df_15m['close'], window=21)
+        df_15m['ema_50'] = ta.trend.ema_indicator(df_15m['close'], window=50)
+        trend_15m_bullish = df_15m.iloc[-2]['ema_21'] > df_15m.iloc[-2]['ema_50']
+        
+        df_30m['ema_21'] = ta.trend.ema_indicator(df_30m['close'], window=21)
+        df_30m['ema_50'] = ta.trend.ema_indicator(df_30m['close'], window=50)
+        trend_30m_bullish = df_30m.iloc[-2]['ema_21'] > df_30m.iloc[-2]['ema_50']
+        
+        df_1h['ema_21'] = ta.trend.ema_indicator(df_1h['close'], window=21)
+        df_1h['ema_50'] = ta.trend.ema_indicator(df_1h['close'], window=50)
+        trend_1h_bullish = df_1h.iloc[-2]['ema_21'] > df_1h.iloc[-2]['ema_50']
+
+        warning = None
+        trade_type = active_trade.get("type")
+        
+        if self.model is not None:
+            bb_range = last_closed_candle['bb_upper'] - last_closed_candle['bb_lower']
+            bb_pos = (last_closed_candle['close'] - last_closed_candle['bb_lower']) / bb_range if bb_range != 0 else 0
+            
+            feature = [
+                last_closed_candle['rsi'],
+                last_closed_candle['macd'],
+                last_closed_candle['macd_signal'],
+                last_closed_candle['atr'] / last_closed_candle['close'],
+                (last_closed_candle['close'] - last_closed_candle['ema_21']) / last_closed_candle['ema_21'],
+                (last_closed_candle['ema_21'] - last_closed_candle['ema_50']) / last_closed_candle['ema_50'],
+                last_closed_candle['obv_diff'] / last_closed_candle['volume'] if last_closed_candle['volume'] != 0 else 0,
+                last_closed_candle['adx'],
+                bb_pos,
+                1 if trend_15m_bullish else 0,
+                1 if trend_30m_bullish else 0,
+                1 if trend_1h_bullish else 0
+            ]
+            feature_df = pd.DataFrame([feature], columns=['rsi', 'macd', 'macd_sig', 'atr_rel', 'dist_ema21', 'dist_emas', 'obv_rel', 'adx', 'bb_pos', 'trend_15m', 'trend_1h', 'trend_4h'])
+            win_prob = self.model.predict_proba(feature_df)[0][1]
+            
+            # Phân tích Cảnh Báo
+            if trade_type == "LONG":
+                # Kịch bản xấu: Gãy EMA 50 hoặc Xác suất Win < 30%
+                if last_closed_candle['close'] < last_closed_candle['ema_50']:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh LONG)**\n\nGiá đã gãy đường EMA 50 khung 5m. Phe Bán đang áp đảo. \n\n👉 **CÂN NHẮC CHỐT LỜI/CẮT LỖ SỚM** để bảo toàn vốn!"
+                elif win_prob < 0.30:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh LONG)**\n\nXác suất thắng của phe Long vừa sụt giảm thê thảm xuống chỉ còn {win_prob*100:.1f}%. \n\n👉 **CÂN NHẮC THOÁT HÀNG SỚM!**"
+            
+            elif trade_type == "SHORT":
+                # Kịch bản xấu: Vượt EMA 50 hoặc Xác suất Win > 70% (tức phe Long đang mạnh)
+                if last_closed_candle['close'] > last_closed_candle['ema_50']:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh SHORT)**\n\nGiá đã phá vỡ lên trên đường EMA 50 khung 5m. Phe Mua đang bùng nổ. \n\n👉 **CÂN NHẮC CHỐT LỜI/CẮT LỖ SỚM** để bảo toàn vốn!"
+                elif win_prob > 0.70:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh SHORT)**\n\nXác suất thắng của phe Long vừa tăng vọt lên {win_prob*100:.1f}%. Rất nguy hiểm cho lệnh Short của sếp. \n\n👉 **CÂN NHẮC THOÁT HÀNG SỚM!**"
+
+        return warning

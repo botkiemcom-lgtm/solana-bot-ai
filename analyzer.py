@@ -19,29 +19,29 @@ class StrategyAnalyzer:
             except Exception as e:
                 print(f"Lỗi load AI: {e}")
 
-    def analyze(self, df_5m, df_15m, df_1h, df_4h):
+    def analyze(self, df_5m, df_15m, df_30m, df_1h):
         """
-        Nhận DataFrame nến 5m, 15m, 1H và 4H, tính toán chỉ báo Đa khung thời gian.
+        Nhận DataFrame nến 5m, 15m, 30m và 1H, tính toán chỉ báo Đa khung thời gian.
         """
-        if df_5m is None or len(df_5m) < self.ema_long or df_1h is None or len(df_1h) < 50 or df_15m is None or df_4h is None:
+        if df_5m is None or len(df_5m) < self.ema_long or df_1h is None or len(df_1h) < 50 or df_15m is None or df_30m is None:
             return None
 
-        # --- 1. TÍNH TOÁN KHUNG 15M, 1H, 4H ---
+        # --- 1. TÍNH TOÁN KHUNG 15M, 30M, 1H ---
         df_15m['ema_21'] = ta.trend.ema_indicator(df_15m['close'], window=21)
         df_15m['ema_50'] = ta.trend.ema_indicator(df_15m['close'], window=50)
         trend_15m_bullish = df_15m.iloc[-2]['ema_21'] > df_15m.iloc[-2]['ema_50']
         
+        df_30m['ema_21'] = ta.trend.ema_indicator(df_30m['close'], window=21)
+        df_30m['ema_50'] = ta.trend.ema_indicator(df_30m['close'], window=50)
+        trend_30m_bullish = df_30m.iloc[-2]['ema_21'] > df_30m.iloc[-2]['ema_50']
+        
         df_1h['ema_21'] = ta.trend.ema_indicator(df_1h['close'], window=21)
         df_1h['ema_50'] = ta.trend.ema_indicator(df_1h['close'], window=50)
         trend_1h_bullish = df_1h.iloc[-2]['ema_21'] > df_1h.iloc[-2]['ema_50']
-        
-        df_4h['ema_21'] = ta.trend.ema_indicator(df_4h['close'], window=21)
-        df_4h['ema_50'] = ta.trend.ema_indicator(df_4h['close'], window=50)
-        trend_4h_bullish = df_4h.iloc[-2]['ema_21'] > df_4h.iloc[-2]['ema_50']
 
-        # Đồng thuận khung lớn (15m, 1h, 4h)
-        mtf_bullish = trend_15m_bullish and trend_1h_bullish and trend_4h_bullish
-        mtf_bearish = not trend_15m_bullish and not trend_1h_bullish and not trend_4h_bullish
+        # Đồng thuận khung lớn (15m, 30m, 1h)
+        mtf_bullish = trend_15m_bullish and trend_30m_bullish and trend_1h_bullish
+        mtf_bearish = not trend_15m_bullish and not trend_30m_bullish and not trend_1h_bullish
 
         # --- 2. TÍNH TOÁN KHUNG 5M ---
         df = df_5m.copy()
@@ -120,8 +120,8 @@ class StrategyAnalyzer:
                 last_closed_candle['adx'],
                 bb_pos,
                 1 if trend_15m_bullish else 0,
-                1 if trend_1h_bullish else 0,
-                1 if trend_4h_bullish else 0
+                1 if trend_30m_bullish else 0,
+                1 if trend_1h_bullish else 0
             ]
             feature_df = pd.DataFrame([feature], columns=['rsi', 'macd', 'macd_sig', 'atr_rel', 'dist_ema21', 'dist_emas', 'obv_rel', 'adx', 'bb_pos', 'trend_15m', 'trend_1h', 'trend_4h'])
             win_prob = self.model.predict_proba(feature_df)[0][1] # Xác suất Win (Class 1)

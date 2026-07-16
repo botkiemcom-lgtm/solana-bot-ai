@@ -31,18 +31,18 @@ def run_bot_job():
     analyzer = StrategyAnalyzer()
     notifier = TelegramNotifier()
 
-    # 2. Lấy dữ liệu đa khung thời gian (5m, 15m, 1h, 4h)
+    # 2. Lấy dữ liệu đa khung thời gian (5m, 15m, 30m, 1h)
     df_5m = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="5m", limit=100)
     df_15m = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="15m", limit=100)
+    df_30m = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="30m", limit=100)
     df_1h = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="1h", limit=100)
-    df_4h = fetcher.fetch_ohlcv(symbol="SOL/USDT", timeframe="4h", limit=100)
     
-    if df_5m is not None and df_15m is not None and df_1h is not None and df_4h is not None:
+    if df_5m is not None and df_15m is not None and df_30m is not None and df_1h is not None:
         telegram_bot.SYSTEM_STATUS["status"] = "🟢 Đang hoạt động tốt"
         telegram_bot.SYSTEM_STATUS["last_error"] = "Không có"
         
-        # 3. Đưa vào bộ não phân tích (V4.0)
-        result = analyzer.analyze(df_5m, df_15m, df_1h, df_4h)
+        # 3. Đưa vào bộ não phân tích (V4.0 Fast Scalping)
+        result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
         
         # 4. Gửi tín hiệu nếu có
         if result:

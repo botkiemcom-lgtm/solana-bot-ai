@@ -226,19 +226,24 @@ class StrategyAnalyzer:
             feature_df = pd.DataFrame([feature], columns=['rsi', 'macd', 'macd_sig', 'atr_rel', 'dist_ema21', 'dist_emas', 'obv_rel', 'adx', 'bb_pos', 'trend_15m', 'trend_1h', 'trend_4h'])
             win_prob = self.model.predict_proba(feature_df)[0][1]
             
-            # Phân tích Cảnh Báo
+            # Phân tích Cảnh Báo (Đã fix lỗi hiểu nhầm win_prob của AI)
+            is_bullish_trend = trend_15m_bullish and trend_30m_bullish and trend_1h_bullish
+            is_bearish_trend = not trend_15m_bullish and not trend_30m_bullish and not trend_1h_bullish
+            
             if trade_type == "LONG":
-                # Kịch bản xấu: Gãy EMA 50 hoặc Xác suất Win < 30%
-                if last_closed_candle['close'] < last_closed_candle['ema_50']:
-                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh LONG)**\n\nGiá đã gãy đường EMA 50 khung 5m. Phe Bán đang áp đảo. \n\n👉 **CÂN NHẮC CHỐT LỜI/CẮT LỖ SỚM** để bảo toàn vốn!"
-                elif win_prob < 0.30:
-                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh LONG)**\n\nXác suất thắng của phe Long vừa sụt giảm thê thảm xuống chỉ còn {win_prob*100:.1f}%. \n\n👉 **CÂN NHẮC THOÁT HÀNG SỚM!**"
+                # Kịch bản 1: Xu hướng đã ĐẢO CHIỀU sang Short và tỷ lệ thắng của Short đang cao
+                if is_bearish_trend and win_prob > 0.60:
+                    warning = f"⚠️ **CẢNH BÁO KHẨN CẤP TỪ AI (Lệnh LONG)**\n\nThị trường đã hoàn toàn ĐẢO CHIỀU sang xu hướng Giảm. Xác suất phe Short ăn tiền lúc này lên tới {win_prob*100:.1f}%. \n\n👉 **HÃY CẮT LỖ SỚM ĐỂ BẢO TOÀN VỐN!**"
+                # Kịch bản 2: Vẫn là xu hướng Long nhưng AI đánh giá tỷ lệ thắng quá thấp (cạn lực)
+                elif is_bullish_trend and win_prob < 0.30:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh LONG)**\n\nXác suất thắng của phe Long vừa sụt giảm thê thảm xuống chỉ còn {win_prob*100:.1f}%. Lực đẩy đã cạn. \n\n👉 **CÂN NHẮC CHỐT LỜI HOẶC THOÁT HÀNG SỚM!**"
             
             elif trade_type == "SHORT":
-                # Kịch bản xấu: Vượt EMA 50 hoặc Xác suất Win > 70% (tức phe Long đang mạnh)
-                if last_closed_candle['close'] > last_closed_candle['ema_50']:
-                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh SHORT)**\n\nGiá đã phá vỡ lên trên đường EMA 50 khung 5m. Phe Mua đang bùng nổ. \n\n👉 **CÂN NHẮC CHỐT LỜI/CẮT LỖ SỚM** để bảo toàn vốn!"
-                elif win_prob > 0.70:
-                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh SHORT)**\n\nXác suất thắng của phe Long vừa tăng vọt lên {win_prob*100:.1f}%. Rất nguy hiểm cho lệnh Short của sếp. \n\n👉 **CÂN NHẮC THOÁT HÀNG SỚM!**"
+                # Kịch bản 1: Xu hướng đã ĐẢO CHIỀU sang Long và tỷ lệ thắng của Long đang cao
+                if is_bullish_trend and win_prob > 0.60:
+                    warning = f"⚠️ **CẢNH BÁO KHẨN CẤP TỪ AI (Lệnh SHORT)**\n\nThị trường đã hoàn toàn ĐẢO CHIỀU sang xu hướng Tăng. Xác suất phe Long ăn tiền lúc này lên tới {win_prob*100:.1f}%. \n\n👉 **HÃY CẮT LỖ SỚM ĐỂ BẢO TOÀN VỐN!**"
+                # Kịch bản 2: Vẫn là xu hướng Short nhưng AI đánh giá tỷ lệ thắng quá thấp (cạn lực xả)
+                elif is_bearish_trend and win_prob < 0.30:
+                    warning = f"⚠️ **CẢNH BÁO TỪ AI (Lệnh SHORT)**\n\nXác suất thắng của phe Short vừa sụt giảm thê thảm xuống chỉ còn {win_prob*100:.1f}%. Lực xả đã yếu dần. \n\n👉 **CÂN NHẮC CHỐT LỜI HOẶC THOÁT HÀNG SỚM!**"
 
         return warning

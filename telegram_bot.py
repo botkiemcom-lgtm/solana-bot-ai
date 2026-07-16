@@ -77,10 +77,25 @@ class TelegramNotifier:
             response = requests.post(self.api_url, json=payload)
             if response.status_code == 200:
                 print("Đã gửi tín hiệu Telegram thành công!")
+                # Kích hoạt cuộc gọi điện thoại
+                self.make_call(symbol, signal_type)
             else:
                 print(f"Lỗi gửi Telegram: {response.text}")
         except Exception as e:
             print(f"Lỗi kết nối Telegram: {e}")
+
+    def make_call(self, symbol, signal_type):
+        """Sử dụng CallMeBot để gọi điện thoại cảnh báo tín hiệu"""
+        username = "@huyduong112233"
+        text = f"Sếp ơi, có kèo {signal_type} con {symbol.replace('/', ' ')}, vào Telegram kiểm tra ngay nhé!"
+        # Thay khoảng trắng bằng dấu +
+        text = text.replace(" ", "+")
+        url = f"http://api.callmebot.com/start.php?user={username}&text={text}&lang=vi-VN-Standard-A&rpt=2"
+        try:
+            requests.get(url)
+            print("Đã kích hoạt cuộc gọi CallMeBot thành công!")
+        except Exception as e:
+            print(f"Lỗi gọi CallMeBot: {e}")
 
     def send_message(self, text, reply_markup=None):
         """

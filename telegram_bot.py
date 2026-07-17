@@ -50,11 +50,24 @@ class TelegramNotifier:
 
         icon = "🟢 LONG" if signal_type == "LONG" else "🔴 SHORT"
         
+        # Tính toán Vùng Entry Đẹp và Điểm FOMO dựa trên ATR (khoảng cách SL)
+        atr_value = abs(entry - sl) / 2.0
+        
+        if signal_type == "LONG":
+            ideal_zone = f"{entry - (0.5 * atr_value):.4f} ➡️ {entry:.4f}"
+            fomo_price = entry + (0.5 * atr_value)
+            advice = f"💡 **Lời khuyên:** Canh mua quanh vùng `{ideal_zone}`. Nếu giá đã bay quá `{fomo_price:.4f}` thì **BỎ KÈO** (Tránh FOMO vì Stoploss sẽ rất xa)."
+        else: # SHORT
+            ideal_zone = f"{entry:.4f} ➡️ {entry + (0.5 * atr_value):.4f}"
+            fomo_price = entry - (0.5 * atr_value)
+            advice = f"💡 **Lời khuyên:** Canh short quanh vùng `{ideal_zone}`. Nếu giá đã sập quá `{fomo_price:.4f}` thì **BỎ KÈO** (Tránh FOMO vì Stoploss sẽ rất xa)."
+        
         message = (
             f"🚀 **TÍN HIỆU {icon} {symbol}** 🚀\n\n"
-            f"🔹 **Entry:** {entry}\n"
+            f"🔹 **Giá Bot Quét (Lúc báo):** {entry}\n"
             f"🎯 **Take Profit (TP):** {tp}\n"
             f"🛑 **Stop Loss (SL):** {sl}\n\n"
+            f"{advice}\n\n"
             f"📊 **Thông số kỹ thuật:**\n"
             f"- RSI: {rsi:.2f}\n"
             f"- Xu hướng EMA: {ema_trend}\n"

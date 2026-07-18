@@ -50,27 +50,51 @@ class TelegramNotifier:
 
         icon = "🟢 LONG" if signal_type == "LONG" else "🔴 SHORT"
         
-        # Tính toán Vùng Entry Đẹp và Điểm FOMO dựa trên ATR (khoảng cách SL)
-        atr_value = abs(entry - sl) / 2.0
+        # --- PHÂN TÍCH RỦI RO & ĐI LỆNH ---
+        risk_warnings = []
         
+        # 1. Rủi ro trượt giá (FOMO / Slippage)
+        # Nới lỏng khoảng cách cho phép trượt giá lên 1.0 ATR (trước đây là 0.5 nên quá khắt khe)
+        atr_value = abs(entry - sl) / 2.0
         if signal_type == "LONG":
-            ideal_zone = f"{entry - (0.5 * atr_value):.4f} ➡️ {entry:.4f}"
-            fomo_price = entry + (0.5 * atr_value)
-            advice = f"💡 **Lời khuyên:** Canh mua quanh vùng `{ideal_zone}`. Nếu giá đã bay quá `{fomo_price:.4f}` thì **BỎ KÈO** (Tránh FOMO vì Stoploss sẽ rất xa)."
-        else: # SHORT
-            ideal_zone = f"{entry:.4f} ➡️ {entry + (0.5 * atr_value):.4f}"
-            fomo_price = entry - (0.5 * atr_value)
-            advice = f"💡 **Lời khuyên:** Canh short quanh vùng `{ideal_zone}`. Nếu giá đã sập quá `{fomo_price:.4f}` thì **BỎ KÈO** (Tránh FOMO vì Stoploss sẽ rất xa)."
+            fomo_price = entry + atr_value
+            ideal_zone = f"{entry - atr_value:.4f} ➡️ {entry + (0.3*atr_value):.4f}"
+            slip_warning = f"Nếu giá lỡ bay quá `{fomo_price:.4f}`, khuyên sếp ĐI NỬA VOLUME để bù đắp rủi ro Stoploss bị xa."
+        else:
+            fomo_price = entry - atr_value
+            ideal_zone = f"{entry:.4f} ➡️ {entry + atr_value:.4f}"
+            slip_warning = f"Nếu giá lỡ sập quá `{fomo_price:.4f}`, khuyên sếp ĐI NỬA VOLUME để bù đắp rủi ro Stoploss bị xa."
+            
+        risk_warnings.append(f"🎯 **Entry lý tưởng:** Quanh vùng `{ideal_zone}`.\n👉 {slip_warning}")
+        
+        # 2. Rủi ro RSI (Quá Mua / Quá Bán)
+        if signal_type == "LONG" and rsi > 65:
+            risk_warnings.append("⚠️ **Cẩn thận RSI:** Đang ở vùng quá mua (>65), rất dễ có nhịp chỉnh (Pullback) đỏ lửa rồi mới lên tiếp.")
+        elif signal_type == "SHORT" and rsi < 35:
+            risk_warnings.append("⚠️ **Cẩn thận RSI:** Đang ở vùng quá bán (<35), rất dễ bị giật râu lên quét thanh khoản rồi mới sập.")
+            
+        # 3. Phân tích độ tự tin của AI
+        try:
+            # Bóc tách win_prob từ chuỗi ema_trend (Ví dụ: "... | AI_Win_Prob: 96.7%")
+            win_prob = float(ema_trend.split("AIWinProb: ")[-1].replace("%", "").strip())
+            if win_prob < 70.0:
+                risk_warnings.append(f"⚠️ **Rủi ro AI:** Xác suất thắng chỉ ở mức Khá ({win_prob}%). Khuyến nghị đi Volume nhỏ lại.")
+            elif win_prob >= 90.0:
+                risk_warnings.append(f"🔥 **AI Tự Tin:** Tỷ lệ ăn cực cao ({win_prob}%). Kèo này đẹp, có thể vã Full Volume!")
+        except Exception:
+            pass
+            
+        advice = "\n💡 **PHÂN TÍCH RỦI RO KÈO NÀY:**\n" + "\n\n".join(risk_warnings)
         
         message = (
             f"🚀 **TÍN HIỆU {icon} {symbol}** 🚀\n\n"
-            f"🔹 **Giá Bot Quét (Lúc báo):** {entry}\n"
-            f"🎯 **Take Profit (TP):** {tp}\n"
-            f"🛑 **Stop Loss (SL):** {sl}\n\n"
-            f"{advice}\n\n"
+            f"🔹 **Giá Bot Quét:** {entry}\n"
+            f"🎯 **Take Profit:** {tp}\n"
+            f"🛑 **Stop Loss:** {sl}\n\n"
             f"📊 **Thông số kỹ thuật:**\n"
             f"- RSI: {rsi:.2f}\n"
-            f"- Xu hướng EMA: {ema_trend}\n"
+            f"- Xu hướng: {ema_trend}\n"
+            f"{advice}\n"
         )
 
         reply_markup = {

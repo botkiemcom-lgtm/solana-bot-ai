@@ -12,15 +12,24 @@ SYSTEM_STATUS = {
     "last_signal": "Chưa có"
 }
 
-ACTIVE_TRADE = {
-    "in_position": False,
-    "type": None
-}
+ACTIVE_USERS = {}
+# Lưu trạng thái độc lập của từng user theo định dạng:
+# { "chat_id_1": {"in_position": False, "type": None}, "chat_id_2": ... }
 
 class TelegramNotifier:
     def __init__(self):
+        global ACTIVE_USERS
         self.token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        
+        # Hỗ trợ nhiều Chat ID cách nhau bởi dấu phẩy
+        chat_ids_str = os.getenv('TELEGRAM_CHAT_ID', '')
+        self.chat_ids = [cid.strip() for cid in chat_ids_str.split(',') if cid.strip()]
+        
+        # Khởi tạo trạng thái mặc định cho mỗi user
+        for cid in self.chat_ids:
+            if str(cid) not in ACTIVE_USERS:
+                ACTIVE_USERS[str(cid)] = {"in_position": False, "type": None}
+                
         self.api_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         self.get_updates_url = f"https://api.telegram.org/bot{self.token}/getUpdates"
         self.edit_message_url = f"https://api.telegram.org/bot{self.token}/editMessageText"
@@ -40,11 +49,11 @@ class TelegramNotifier:
         except Exception as e:
             print(f"Lỗi tạo Menu Telegram: {e}")
 
-    def send_signal(self, symbol, signal_type, entry, tp, sl, rsi, ema_trend):
+    def send_signal(self, target_chat_id, symbol, signal_type, entry, tp, sl, rsi, ema_trend):
         """
-        Gửi tin nhắn tín hiệu trade về Telegram kèm Nút Bấm
+        Gửi tin nhắn tín hiệu trade về Telegram kèm Nút Bấm cho một user cụ thể
         """
-        if not self.token or not self.chat_id:
+        if not self.token or not target_chat_id:
             print("Chưa cấu hình Telegram Token hoặc Chat ID.")
             return
 
@@ -104,7 +113,7 @@ class TelegramNotifier:
         }
 
         payload = {
-            "chat_id": self.chat_id,
+            "chat_id": target_chat_id,
             "text": message,
             "parse_mode": "Markdown",
             "reply_markup": reply_markup
@@ -113,43 +122,55 @@ class TelegramNotifier:
         try:
             response = requests.post(self.api_url, json=payload)
             if response.status_code == 200:
-                print("Đã gửi tín hiệu Telegram thành công!")
-                # Kích hoạt cuộc gọi điện thoại
-                self.make_call(symbol, signal_type)
+                print(f"Đã gửi tín hiệu Telegram thành công cho {target_chat_id}!")
+                # Kích hoạt cuộc gọi điện thoại cho từng người
+                self.make_call(target_chat_id, symbol, signal_type)
             else:
                 print(f"Lỗi gửi Telegram: {response.text}")
         except Exception as e:
             print(f"Lỗi kết nối Telegram: {e}")
 
-    def make_call(self, symbol, signal_type):
+    def make_call(self, target_chat_id, symbol, signal_type):
         """Sử dụng CallMeBot để gọi điện thoại cảnh báo tín hiệu"""
-        # Kiểm tra khung giờ ngủ của sếp (23:00 - 06:00 VN)
         import datetime
         vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
-        if vn_time.hour >= 23 or vn_time.hour < 6:
-            print(f"🔇 Bỏ qua gọi điện báo thức (Hiện tại là {vn_time.strftime('%H:%M')} - Giờ ngủ của sếp).")
+        
+        # 1. Cấu hình mặc định cho sếp
+        username = "@huyduong112233"
+        limit_time = True
+        greeting = "Sếp ơi"
+        
+        # 2. Cấu hình riêng cho anh Nhựt
+        if str(target_chat_id) == "1763816685":
+            username = "@LiiO61"
+            limit_time = False
+            greeting = "Nhựt ơi"
+            
+        # 3. Kiểm tra khung giờ ngủ (Chỉ áp dụng cho sếp)
+        if limit_time and (vn_time.hour >= 23 or vn_time.hour < 6):
+            print(f"🔇 Bỏ qua gọi điện báo thức cho {username} (Hiện tại là {vn_time.strftime('%H:%M')} - Giờ ngủ).")
             return
             
-        username = "@huyduong112233"
-        text = f"Sếp ơi, có kèo {signal_type} con {symbol.replace('/', ' ')}, vào Telegram kiểm tra ngay nhé!"
+        text = f"{greeting}, có kèo {signal_type} con {symbol.replace('/', ' ')}, vào Telegram kiểm tra ngay nhé!"
         # Thay khoảng trắng bằng dấu +
         text = text.replace(" ", "+")
+        
         url = f"http://api.callmebot.com/start.php?user={username}&text={text}&lang=vi-VN-Standard-A&rpt=2"
         try:
             requests.get(url)
-            print("Đã kích hoạt cuộc gọi CallMeBot thành công!")
+            print(f"Đã kích hoạt cuộc gọi CallMeBot cho {username} thành công!")
         except Exception as e:
-            print(f"Lỗi gọi CallMeBot: {e}")
+            print(f"Lỗi gọi CallMeBot cho {username}: {e}")
 
-    def send_message(self, text, reply_markup=None):
+    def send_message(self, target_chat_id, text, reply_markup=None):
         """
-        Gửi tin nhắn text bình thường (có hỗ trợ Nút Bấm)
+        Gửi tin nhắn text bình thường (có hỗ trợ Nút Bấm) cho một user cụ thể
         """
-        if not self.token or not self.chat_id:
+        if not self.token or not target_chat_id:
             return
 
         payload = {
-            "chat_id": self.chat_id,
+            "chat_id": target_chat_id,
             "text": text,
             "parse_mode": "Markdown"
         }
@@ -187,9 +208,9 @@ class TelegramNotifier:
         """
         Lắng nghe và phản hồi lệnh/nút bấm từ người dùng
         """
-        global ACTIVE_TRADE
+        global ACTIVE_USERS
         
-        if not self.token or not self.chat_id:
+        if not self.token or not self.chat_ids:
             return
 
         params = {"timeout": 1}
@@ -213,9 +234,10 @@ class TelegramNotifier:
                         
                         if data.startswith("ENTERED_"):
                             trade_type = data.split("_")[1]
-                            # Cập nhật trạng thái sang ĐANG GỒNG LỆNH
-                            ACTIVE_TRADE["in_position"] = True
-                            ACTIVE_TRADE["type"] = trade_type
+                            # Cập nhật trạng thái riêng của người bấm sang ĐANG GỒNG LỆNH
+                            if str(chat_id) in ACTIVE_USERS:
+                                ACTIVE_USERS[str(chat_id)]["in_position"] = True
+                                ACTIVE_USERS[str(chat_id)]["type"] = trade_type
                             
                             new_text = original_text + f"\n\n🛡️ **CHẾ ĐỘ BẢO VỆ: ĐANG BẬT ({trade_type})**\n_Bot đang theo dõi sát sao thị trường để bảo vệ vốn..._"
                             new_markup = {
@@ -228,9 +250,10 @@ class TelegramNotifier:
                             print(f"Sếp đã xác nhận vào lệnh {trade_type}. Chuyển sang chế độ Vệ Sĩ!")
                             
                         elif data == "STOP_TRADE":
-                            # Tắt chế độ bảo vệ, quay lại săn mồi
-                            ACTIVE_TRADE["in_position"] = False
-                            ACTIVE_TRADE["type"] = None
+                            # Tắt chế độ bảo vệ riêng của người bấm
+                            if str(chat_id) in ACTIVE_USERS:
+                                ACTIVE_USERS[str(chat_id)]["in_position"] = False
+                                ACTIVE_USERS[str(chat_id)]["type"] = None
                             
                             # Xóa đoạn text Bảo Vệ Đang Bật
                             if "🛡️" in original_text:
@@ -249,10 +272,14 @@ class TelegramNotifier:
                     text = message.get("text", "")
                     chat_id = message.get("chat", {}).get("id")
 
-                    if text == "/ping" and str(chat_id) == str(self.chat_id):
-                        self.send_message("🏓 Pong! Bot V4.0 (Fast Scalping) vẫn đang thức trắng đêm phục vụ sếp!")
-                    elif text == "/status" and str(chat_id) == str(self.chat_id):
-                        mode = "🛡️ ĐANG BẢO VỆ LỆNH" if ACTIVE_TRADE["in_position"] else "⚔️ ĐANG SĂN MỒI"
+                    if str(chat_id) not in self.chat_ids:
+                        continue # Bỏ qua nếu không phải user được cấp quyền
+
+                    if text == "/ping":
+                        self.send_message(chat_id, "🏓 Pong! Bot V4.0 (Fast Scalping) vẫn đang thức trắng đêm phục vụ sếp!")
+                    elif text == "/status":
+                        user_state = ACTIVE_USERS.get(str(chat_id), {"in_position": False})
+                        mode = "🛡️ ĐANG BẢO VỆ LỆNH" if user_state["in_position"] else "⚔️ ĐANG SĂN MỒI"
                         msg = (
                             f"📊 **BÁO CÁO TRẠNG THÁI HỆ THỐNG**\n\n"
                             f"🔹 **Chế độ:** {mode}\n"
@@ -261,6 +288,6 @@ class TelegramNotifier:
                             f"⚠️ **Lỗi hiện tại:** {SYSTEM_STATUS['last_error']}\n"
                             f"🔥 **Tín hiệu gần nhất:** {SYSTEM_STATUS['last_signal']}"
                         )
-                        self.send_message(msg)
+                        self.send_message(chat_id, msg)
         except Exception:
             pass

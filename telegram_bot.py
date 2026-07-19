@@ -123,6 +123,13 @@ class TelegramNotifier:
 
     def make_call(self, symbol, signal_type):
         """Sử dụng CallMeBot để gọi điện thoại cảnh báo tín hiệu"""
+        # Kiểm tra khung giờ ngủ của sếp (23:00 - 06:00 VN)
+        import datetime
+        vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
+        if vn_time.hour >= 23 or vn_time.hour < 6:
+            print(f"🔇 Bỏ qua gọi điện báo thức (Hiện tại là {vn_time.strftime('%H:%M')} - Giờ ngủ của sếp).")
+            return
+            
         username = "@huyduong112233"
         text = f"Sếp ơi, có kèo {signal_type} con {symbol.replace('/', ' ')}, vào Telegram kiểm tra ngay nhé!"
         # Thay khoảng trắng bằng dấu +

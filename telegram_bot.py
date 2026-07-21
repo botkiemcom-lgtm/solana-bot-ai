@@ -49,7 +49,7 @@ class TelegramNotifier:
         except Exception as e:
             print(f"Lỗi tạo Menu Telegram: {e}")
 
-    def send_signal(self, target_chat_id, symbol, signal_type, entry, tp, sl, rsi, ema_trend):
+    def send_signal(self, target_chat_id, symbol, signal_type, entry, tp, sl, rsi, ema_trend, exchange_name="BINANCE"):
         """
         Gửi tin nhắn tín hiệu trade về Telegram kèm Nút Bấm cho một user cụ thể
         """
@@ -95,8 +95,14 @@ class TelegramNotifier:
             
         advice = "\n💡 **PHÂN TÍCH RỦI RO KÈO NÀY:**\n" + "\n\n".join(risk_warnings)
         
+        # Lời nhắn về nguồn sàn
+        exchange_note = f"🏢 **Nguồn Dữ Liệu:** {exchange_name}"
+        if exchange_name == "BYBIT":
+            exchange_note += " (Đã tự động cộng 0.05 giá chuẩn Binance)"
+            
         message = (
             f"🚀 **TÍN HIỆU {icon} {symbol}** 🚀\n\n"
+            f"{exchange_note}\n\n"
             f"🔹 **Giá Bot Quét:** {entry}\n"
             f"🎯 **Take Profit:** {tp}\n"
             f"🛑 **Stop Loss:** {sl}\n\n"

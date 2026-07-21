@@ -38,7 +38,8 @@ def run_bot_job():
     df_1h = fetcher.fetch_ohlcv(symbol="SOL/USDT:USDT", timeframe="1h", limit=100)
     
     if df_5m is not None and df_15m is not None and df_30m is not None and df_1h is not None:
-        telegram_bot.SYSTEM_STATUS["status"] = "🟢 Đang hoạt động tốt"
+        current_exchange = fetcher.last_successful_exchange
+        telegram_bot.SYSTEM_STATUS["status"] = f"🟢 Đang hoạt động tốt (Nguồn: {current_exchange})"
         telegram_bot.SYSTEM_STATUS["last_error"] = "Không có"
         
         # 3. Quét qua tất cả những người dùng được cấp quyền
@@ -71,7 +72,8 @@ def run_bot_job():
                         tp=result['tp'],
                         sl=result['sl'],
                         rsi=result['rsi'],
-                        ema_trend=result['ema_trend']
+                        ema_trend=result['ema_trend'],
+                        exchange_name=current_exchange
                     )
                 else:
                     pass # Chưa có tín hiệu, bỏ qua không in log để tránh rác

@@ -60,6 +60,9 @@ def run_bot_job():
                 # Nếu người này đang Săn Mồi
                 result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
                 
+                # Lấy insight từ AI
+                telegram_bot.SYSTEM_STATUS["market_insight"] = analyzer.last_insight
+                
                 # Gửi tín hiệu nếu có
                 if result:
                     print(f"🔥 Phát hiện tín hiệu {result['signal']}! Đang gửi Telegram cho {chat_id}...")

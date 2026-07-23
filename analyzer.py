@@ -18,6 +18,8 @@ class StrategyAnalyzer:
                 self.model = joblib.load('xgb_model.pkl')
             except Exception as e:
                 print(f"Lỗi load AI: {e}")
+                
+        self.last_insight = "Chưa có dữ liệu phân tích"
 
     def analyze(self, df_5m, df_15m, df_30m, df_1h):
         """
@@ -91,18 +93,36 @@ class StrategyAnalyzer:
         obv_decreasing = last_closed_candle['obv'] < prev_candle['obv']
 
         # Điều kiện LONG: Đồng thuận MTF + 5m Tăng + OBV Tăng
-        if mtf_bullish and trend_5m_bullish:
-            ema_trend = "Tăng (Đồng thuận 5m,15m,30m,1h)"
-            if last_closed_candle['low'] <= last_closed_candle['ema_21'] and last_closed_candle['close'] > last_closed_candle['ema_21']:
-                if obv_increasing:
-                    signal = "LONG"
-
+        if mtf_bullish:
+            if trend_5m_bullish:
+                if last_closed_candle['low'] <= last_closed_candle['ema_21'] and last_closed_candle['close'] > last_closed_candle['ema_21']:
+                    if obv_increasing:
+                        self.last_insight = "Thỏa mãn kỹ thuật LONG, đang chờ AI duyệt..."
+                        signal = "LONG"
+                        ema_trend = "Tăng (Đồng thuận 5m,15m,30m,1h)"
+                    else:
+                        self.last_insight = "Đạt MTF Tăng, nến chạm EMA21 đẹp nhưng Dòng tiền (OBV) đang giảm."
+                else:
+                    self.last_insight = "Đạt MTF Tăng, đang kiên nhẫn chờ nến nhúng về chạm EMA21 (Pullback)."
+            else:
+                self.last_insight = "Khung lớn Tăng nhưng khung 5m đang chỉnh Giảm (Lệch pha)."
+                
         # Điều kiện SHORT: Đồng thuận MTF + 5m Giảm + OBV Giảm
-        elif mtf_bearish and trend_5m_bearish:
-            ema_trend = "Giảm (Đồng thuận 5m,15m,30m,1h)"
-            if last_closed_candle['high'] >= last_closed_candle['ema_21'] and last_closed_candle['close'] < last_closed_candle['ema_21']:
-                if obv_decreasing:
-                    signal = "SHORT"
+        elif mtf_bearish:
+            if trend_5m_bearish:
+                if last_closed_candle['high'] >= last_closed_candle['ema_21'] and last_closed_candle['close'] < last_closed_candle['ema_21']:
+                    if obv_decreasing:
+                        self.last_insight = "Thỏa mãn kỹ thuật SHORT, đang chờ AI duyệt..."
+                        signal = "SHORT"
+                        ema_trend = "Giảm (Đồng thuận 5m,15m,30m,1h)"
+                    else:
+                        self.last_insight = "Đạt MTF Giảm, nến chạm EMA21 đẹp nhưng Dòng tiền (OBV) đang tăng."
+                else:
+                    self.last_insight = "Đạt MTF Giảm, đang kiên nhẫn chờ nến hồi lên chạm EMA21 (Pullback)."
+            else:
+                self.last_insight = "Khung lớn Giảm nhưng khung 5m đang hồi Tăng (Lệch pha)."
+        else:
+            self.last_insight = "Thị trường Lệch Pha (Sideway): Các khung 15m, 30m, 1h không đồng thuận."
                     
         # --- BỘ LỌC AI (V4.0) ---
         if signal and self.model is not None:
@@ -132,6 +152,9 @@ class StrategyAnalyzer:
             if win_prob < 0.50:
                 print(f"🤖 AI Lọc Bỏ Lệnh: Xác suất Win chỉ {win_prob*100:.1f}%")
                 signal = None
+                self.last_insight = f"Bị AI từ chối: Xác suất ăn quá thấp ({win_prob*100:.1f}%)"
+            else:
+                self.last_insight = f"Tín hiệu {signal} quá đẹp! AI duyệt {win_prob*100:.1f}% Win."
 
         # 3. Tính toán TP và SL nếu có tín hiệu
         if signal:

@@ -290,6 +290,7 @@ class TelegramNotifier:
                             f"📊 **BÁO CÁO TRẠNG THÁI HỆ THỐNG**\n\n"
                             f"🔹 **Chế độ:** {mode}\n"
                             f"🔹 **Tình trạng:** {SYSTEM_STATUS['status']}\n"
+                            f"👁️ **Góc nhìn AI:** _{SYSTEM_STATUS.get('market_insight', 'Chưa có dữ liệu')}_\n"
                             f"🕒 **Lần quét nến gần nhất:** {SYSTEM_STATUS['last_check']}\n"
                             f"⚠️ **Lỗi hiện tại:** {SYSTEM_STATUS['last_error']}\n"
                             f"🔥 **Tín hiệu gần nhất:** {SYSTEM_STATUS['last_signal']}"

@@ -58,7 +58,16 @@ def run_bot_job():
                     notifier.send_message(chat_id, warning, reply_markup=reply_markup)
             else:
                 # Nếu người này đang Săn Mồi
-                result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
+                # Bộ lọc Giờ Vàng (Phiên Mỹ 20:00 - 23:30)
+                hour = vn_time.hour
+                minute = vn_time.minute
+                is_us_session = (20 <= hour < 23) or (hour == 23 and minute <= 30)
+                
+                if not is_us_session:
+                    analyzer.last_insight = "Ngoài Giờ Vàng (20h-23h30). Bot đang ngủ đông né bão Sideway..."
+                    result = None
+                else:
+                    result = analyzer.analyze(df_5m, df_15m, df_30m, df_1h)
                 
                 # Lấy insight từ AI
                 telegram_bot.SYSTEM_STATUS["market_insight"] = analyzer.last_insight
@@ -96,7 +105,7 @@ def main():
     
     # Gửi tin nhắn khởi động cho tất cả user
     for cid in notifier.chat_ids:
-        notifier.send_message(cid, "🟢 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 5m). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
+        notifier.send_message(cid, "🟢 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 15m - Thiên Nga Đen). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
     
     # Chạy ngay lần đầu tiên khi vừa bật bot
     run_bot_job()

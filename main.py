@@ -22,7 +22,7 @@ def keep_alive():
     server.serve_forever()
 
 def run_bot_job():
-    print("🔄 Đang quét dữ liệu SOL/USDT khung 5m...")
+    print("🔄 Đang quét dữ liệu SOL/USDT khung 15m (Săn Thiên Nga Đen)...")
     vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
     telegram_bot.SYSTEM_STATUS["last_check"] = vn_time.strftime("%Y-%m-%d %H:%M:%S")
     
@@ -70,12 +70,7 @@ def run_bot_job():
                     notifier.send_signal(
                         target_chat_id=chat_id,
                         symbol="SOL/USDT",
-                        signal_type=result['signal'],
-                        entry=result['entry'],
-                        tp=result['tp'],
-                        sl=result['sl'],
-                        rsi=result['rsi'],
-                        ema_trend=result['ema_trend'],
+                        signal_data=result,
                         exchange_name=current_exchange
                     )
                 else:

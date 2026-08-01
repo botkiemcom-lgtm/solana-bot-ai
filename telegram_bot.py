@@ -49,7 +49,7 @@ class TelegramNotifier:
         except Exception as e:
             print(f"Lỗi tạo Menu Telegram: {e}")
 
-    def send_signal(self, target_chat_id, symbol, signal_type, entry, tp, sl, rsi, ema_trend, exchange_name="BINANCE"):
+    def send_signal(self, target_chat_id, symbol, signal_data, exchange_name="BINANCE"):
         """
         Gửi tin nhắn tín hiệu trade về Telegram kèm Nút Bấm cho một user cụ thể
         """
@@ -57,7 +57,11 @@ class TelegramNotifier:
             print("Chưa cấu hình Telegram Token hoặc Chat ID.")
             return
 
-        icon = "🟢 LONG" if signal_type == "LONG" else "🔴 SHORT"
+        signal_type = signal_data['signal']
+        entry = signal_data['entry']
+        sl = signal_data['sl']
+        rsi = signal_data['rsi']
+        ema_trend = signal_data['ema_trend']
         
         # --- PHÂN TÍCH RỦI RO & ĐI LỆNH ---
         risk_warnings = []
@@ -85,7 +89,7 @@ class TelegramNotifier:
         # 3. Phân tích độ tự tin của AI
         try:
             # Bóc tách win_prob từ chuỗi ema_trend (Ví dụ: "... | AI_Win_Prob: 96.7%")
-            win_prob = float(ema_trend.split("AIWinProb: ")[-1].replace("%", "").strip())
+            win_prob = float(ema_trend.split("AI_Win_Prob: ")[-1].replace("%", "").strip())
             if win_prob < 70.0:
                 risk_warnings.append(f"⚠️ **Rủi ro AI:** Xác suất thắng chỉ ở mức Khá ({win_prob}%). Khuyến nghị đi Volume nhỏ lại.")
             elif win_prob >= 90.0:
@@ -95,20 +99,23 @@ class TelegramNotifier:
             
         advice = "\n💡 **PHÂN TÍCH RỦI RO KÈO NÀY:**\n" + "\n\n".join(risk_warnings)
         
-        # Lời nhắn về nguồn sàn
-        exchange_note = f"🏢 **Nguồn Dữ Liệu:** {exchange_name}"
-        if exchange_name == "BYBIT":
-            exchange_note += " (Đã tự động cộng 0.05 giá chuẩn Binance)"
+        if signal_data['signal'] == 'LONG':
+            icon = "🟢 LONG (Bắt Đáy)"
+        else:
+            icon = "🔴 SHORT (Bán Đỉnh)"
             
         message = (
-            f"🚀 **TÍN HIỆU {icon} {symbol}** 🚀\n\n"
-            f"{exchange_note}\n\n"
-            f"🔹 **Giá Bot Quét:** {entry}\n"
-            f"🎯 **Take Profit:** {tp}\n"
-            f"🛑 **Stop Loss:** {sl}\n\n"
-            f"📊 **Thông số kỹ thuật:**\n"
-            f"- RSI: {rsi:.2f}\n"
-            f"- Xu hướng: {ema_trend}\n"
+            f"🦅 PHÁT HIỆN THIÊN NGA ĐEN (Khung M15) 🦅\n"
+            f"Cặp giao dịch: {symbol}\n"
+            f"Tín hiệu: {icon}\n"
+            f"Giá Entry: {signal_data['entry']}\n\n"
+            f"🛡️ Stoploss Tuyệt Đối: {signal_data['sl']}\n"
+            f"(Lưu ý: Bắt buộc cài Stoploss này để chống bão)\n\n"
+            f"🎯 CHẾ ĐỘ TRAILING STOP (Gồng Lãi):\n"
+            f"- Giá Kích Hoạt (Activation Price): {signal_data.get('activation_price', 'N/A')}\n"
+            f"- Tỷ Lệ Dời (Callback Rate): {signal_data.get('callback_rate', 'N/A')}%\n"
+            f"(Cách đặt: Vào Binance -> Mở lệnh kèm SL tuyệt đối ở trên -> Chuyển sang Trailing Stop, nhập Kích Hoạt & Tỷ lệ dời, tích [Lệnh chỉ giảm], bấm đóng lệnh)\n\n"
+            f"🤖 Lời sấm truyền từ AI: \"{signal_data.get('ema_trend', '')}\"\n"
             f"{advice}\n"
         )
 

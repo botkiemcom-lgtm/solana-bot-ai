@@ -22,7 +22,7 @@ def keep_alive():
     server.serve_forever()
 
 def run_bot_job():
-    print("🔄 Đang quét dữ liệu SOL/USDT khung 15m (Săn Thiên Nga Đen)...")
+    print("👀 Đang quét dữ liệu SOL/USDT khung 30m (Bắt Đáy Pullback)...")
     vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
     telegram_bot.SYSTEM_STATUS["last_check"] = vn_time.strftime("%Y-%m-%d %H:%M:%S")
     
@@ -96,7 +96,7 @@ def main():
     
     # Gửi tin nhắn khởi động cho tất cả user
     for cid in notifier.chat_ids:
-        notifier.send_message(cid, "🟢 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 15m - Thiên Nga Đen). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
+        notifier.send_message(cid, "🚀 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 30m - Bắt Đáy Pullback). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
     
     # Chạy ngay lần đầu tiên khi vừa bật bot
     run_bot_job()

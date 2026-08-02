@@ -260,7 +260,7 @@ class TelegramNotifier:
                         continue # Bỏ qua nếu không phải user được cấp quyền
 
                     if text == "/ping":
-                        self.send_message(chat_id, "🏓 Pong! Bot V5.0 (Thợ Săn Thiên Nga Đen) vẫn đang thức trắng đêm phục vụ sếp!")
+                        self.send_message(chat_id, "🏓 Pong! Bot V6.0 (Kẻ Hủy Diệt Pullback) vẫn đang thức trắng đêm phục vụ sếp!")
                     elif text == "/status":
                         user_state = ACTIVE_USERS.get(str(chat_id), {"in_position": False})
                         mode = "🛡️ ĐANG BẢO VỆ LỆNH" if user_state["in_position"] else "⚔️ ĐANG SĂN MỒI"

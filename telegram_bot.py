@@ -63,60 +63,31 @@ class TelegramNotifier:
         rsi = signal_data['rsi']
         ema_trend = signal_data['ema_trend']
         
-        # --- PHÂN TÍCH RỦI RO & ĐI LỆNH ---
-        risk_warnings = []
-        
-        # 1. Rủi ro trượt giá (FOMO / Slippage)
-        # Nới lỏng khoảng cách cho phép trượt giá lên 1.0 ATR (trước đây là 0.5 nên quá khắt khe)
-        atr_value = abs(entry - sl) / 2.0
-        if signal_type == "LONG":
-            fomo_price = entry + atr_value
-            ideal_zone = f"{entry - atr_value:.4f} ➡️ {entry + (0.3*atr_value):.4f}"
-            slip_warning = f"Nếu giá lỡ bay quá `{fomo_price:.4f}`, khuyên sếp ĐI NỬA VOLUME để bù đắp rủi ro Stoploss bị xa."
-        else:
-            fomo_price = entry - atr_value
-            ideal_zone = f"{entry:.4f} ➡️ {entry + atr_value:.4f}"
-            slip_warning = f"Nếu giá lỡ sập quá `{fomo_price:.4f}`, khuyên sếp ĐI NỬA VOLUME để bù đắp rủi ro Stoploss bị xa."
-            
-        risk_warnings.append(f"🎯 **Entry lý tưởng:** Quanh vùng `{ideal_zone}`.\n👉 {slip_warning}")
-        
-        # 2. Rủi ro RSI (Quá Mua / Quá Bán)
-        if signal_type == "LONG" and rsi > 65:
-            risk_warnings.append("⚠️ **Cẩn thận RSI:** Đang ở vùng quá mua (>65), rất dễ có nhịp chỉnh (Pullback) đỏ lửa rồi mới lên tiếp.")
-        elif signal_type == "SHORT" and rsi < 35:
-            risk_warnings.append("⚠️ **Cẩn thận RSI:** Đang ở vùng quá bán (<35), rất dễ bị giật râu lên quét thanh khoản rồi mới sập.")
-            
-        # 3. Phân tích độ tự tin của AI
-        try:
-            # Bóc tách win_prob từ chuỗi ema_trend (Ví dụ: "... | AI_Win_Prob: 96.7%")
-            win_prob = float(ema_trend.split("AI_Win_Prob: ")[-1].replace("%", "").strip())
-            if win_prob < 70.0:
-                risk_warnings.append(f"⚠️ **Rủi ro AI:** Xác suất thắng chỉ ở mức Khá ({win_prob}%). Khuyến nghị đi Volume nhỏ lại.")
-            elif win_prob >= 90.0:
-                risk_warnings.append(f"🔥 **AI Tự Tin:** Tỷ lệ ăn cực cao ({win_prob}%). Kèo này đẹp, có thể vã Full Volume!")
-        except Exception:
-            pass
-            
-        advice = "\n💡 **PHÂN TÍCH RỦI RO KÈO NÀY:**\n" + "\n\n".join(risk_warnings)
-        
+        # --- V4: FOMAT MỚI CHỐNG MÙ CHỮ ---
         if signal_data['signal'] == 'LONG':
-            icon = "🟢 LONG (Bắt Đáy)"
+            icon = "🟢 LONG (Đu theo Trend Tăng)"
+            trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh LONG (Mua), nên anh em phải nhập 2 số trên rồi bấm nút **BÁN (SELL) MÀU ĐỎ** để chốt lời nhé!"
         else:
             icon = "🔴 SHORT (Bán Đỉnh)"
+            trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh SHORT (Bán), nên anh em phải nhập 2 số trên rồi bấm nút **MUA (BUY) MÀU XANH** để chốt lời nhé!"
             
         message = (
-            f"🦅 PHÁT HIỆN THIÊN NGA ĐEN (Khung M15) 🦅\n"
+            f"🦅 **PHÁT HIỆN KÈO BẮT ĐÁY (Khung 30m)** 🦅\n"
             f"Cặp giao dịch: {symbol}\n"
-            f"Tín hiệu: {icon}\n"
-            f"Giá Entry: {signal_data['entry']}\n\n"
-            f"🛡️ Stoploss Tuyệt Đối: {signal_data['sl']}\n"
-            f"(Lưu ý: Bắt buộc cài Stoploss này để chống bão)\n\n"
-            f"🎯 CHẾ ĐỘ TRAILING STOP (Gồng Lãi):\n"
-            f"- Giá Kích Hoạt (Activation Price): {signal_data.get('activation_price', 'N/A')}\n"
-            f"- Tỷ Lệ Dời (Callback Rate): {signal_data.get('callback_rate', 'N/A')}%\n"
-            f"(Cách đặt: Vào Binance -> Mở lệnh kèm SL tuyệt đối ở trên -> Chuyển sang Trailing Stop, nhập Kích Hoạt & Tỷ lệ dời, tích [Lệnh chỉ giảm], bấm đóng lệnh)\n\n"
-            f"🤖 Lời sấm truyền từ AI: \"{signal_data.get('ema_trend', '')}\"\n"
-            f"{advice}\n"
+            f"Tín hiệu: {icon}\n\n"
+            f"🎯 **Bước 1: ĐẶT LỆNH LIMIT & CẮT LỖ**\n"
+            f"- Kê lệnh LIMIT tại giá: `{signal_data['entry']}`\n"
+            f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
+            f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
+            f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
+            f"*(Lưu ý: Nếu giá chạm mốc SL này anh em chỉ mất đúng 15$, cực kỳ an toàn)*\n\n"
+            f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
+            f"Khi lệnh Limit đã khớp, vào mục Trailing Stop trên Binance cài:\n"
+            f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"
+            f"- Tỷ Lệ Dời (Callback Rate): `{signal_data.get('callback_rate', 'N/A')}%`\n"
+            f"- Đánh dấu TICK vào ô **[Chỉ Giảm / Reduce Only]**\n"
+            f"{trailing_instruction}\n\n"
+            f"🤖 *Nhận định:* \"{signal_data.get('ema_trend', '')}\"\n"
         )
 
         reply_markup = {
@@ -289,7 +260,7 @@ class TelegramNotifier:
                         continue # Bỏ qua nếu không phải user được cấp quyền
 
                     if text == "/ping":
-                        self.send_message(chat_id, "🏓 Pong! Bot V4.0 (Fast Scalping) vẫn đang thức trắng đêm phục vụ sếp!")
+                        self.send_message(chat_id, "🏓 Pong! Bot V5.0 (Thợ Săn Thiên Nga Đen) vẫn đang thức trắng đêm phục vụ sếp!")
                     elif text == "/status":
                         user_state = ACTIVE_USERS.get(str(chat_id), {"in_position": False})
                         mode = "🛡️ ĐANG BẢO VỆ LỆNH" if user_state["in_position"] else "⚔️ ĐANG SĂN MỒI"

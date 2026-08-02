@@ -80,7 +80,7 @@ class TelegramNotifier:
             f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
             f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
             f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
-            f"*(Lưu ý: Nếu giá chạm mốc SL này anh em chỉ mất đúng 15$, cực kỳ an toàn)*\n\n"
+            f"*(Lưu ý: Nếu giá chạm mốc SL này anh em chỉ mất đúng 10 USD, cực kỳ an toàn)*\n\n"
             f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
             f"Khi lệnh Limit đã khớp, vào mục Trailing Stop trên Binance cài:\n"
             f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"

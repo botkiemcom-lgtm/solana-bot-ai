@@ -61,7 +61,7 @@ class StrategyAnalyzer:
             
         self.last_insight = ema_trend
 
-        # 3. Tính toán Khối lượng và Stoploss (V3 + Hard SL 15$)
+        # 3. Tính toán Khối lượng và Stoploss (V4 + Hard SL 10 USD)
         entry_price = last_closed_candle['close'] # Limit ngay giá đóng cửa của cây nến vừa xong
         
         # AI chia vốn linh hoạt
@@ -74,8 +74,8 @@ class StrategyAnalyzer:
             
         pos_usd = margin * 10 # Leverage 10x
         
-        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 15$
-        sl_pct = 15.0 / pos_usd
+        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD
+        sl_pct = 10.0 / pos_usd
         
         if signal == "LONG":
             sl = entry_price * (1 - sl_pct)

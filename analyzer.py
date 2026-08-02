@@ -61,8 +61,14 @@ class StrategyAnalyzer:
             
         self.last_insight = ema_trend
 
-        # 3. Tính toán Khối lượng và Stoploss (V4 + Hard SL 10 USD)
-        entry_price = last_closed_candle['close'] # Limit ngay giá đóng cửa của cây nến vừa xong
+        # 3. Tính toán Khối lượng, Vùng Kê Lệnh và Stoploss (V4 + Entry Zone + Hard SL 10 USD)
+        # Thay vì lấy giá đóng cửa, chúng ta tạo ra Vùng Giá Mua giữa EMA 21 và EMA 50
+        ema21 = last_closed_candle['ema_21']
+        ema50 = last_closed_candle['ema_50']
+        
+        zone_min = min(ema21, ema50)
+        zone_max = max(ema21, ema50)
+        avg_entry = (zone_min + zone_max) / 2
         
         # AI chia vốn linh hoạt
         if (signal == "LONG" and rsi_val < 40) or (signal == "SHORT" and rsi_val > 60):
@@ -74,24 +80,27 @@ class StrategyAnalyzer:
             
         pos_usd = margin * 10 # Leverage 10x
         
-        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD
+        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD (Dựa trên mức giá DCA trung bình)
         sl_pct = 10.0 / pos_usd
         
         if signal == "LONG":
-            sl = entry_price * (1 - sl_pct)
+            sl = avg_entry * (1 - sl_pct)
         else:
-            sl = entry_price * (1 + sl_pct)
+            sl = avg_entry * (1 + sl_pct)
             
         # 4. Tính toán Trailing Stop
-        risk_distance = abs(entry_price - sl)
+        risk_distance = abs(avg_entry - sl)
         # Activation = 1.5R
-        activation_price = entry_price + (risk_distance * 1.5) if signal == "LONG" else entry_price - (risk_distance * 1.5)
+        activation_price = avg_entry + (risk_distance * 1.5) if signal == "LONG" else avg_entry - (risk_distance * 1.5)
         # Callback Rate = Kế thừa % khoảng cách SL (sl_pct * 100)
         callback_rate = round(sl_pct * 100, 2)
 
         return {
             "signal": signal,
-            "entry": round(entry_price, 4),
+            "entry": f"{round(zone_min, 4)} - {round(zone_max, 4)}", # Dùng cho main.py log
+            "zone_min": round(zone_min, 4),
+            "zone_max": round(zone_max, 4),
+            "avg_entry": round(avg_entry, 4),
             "margin_desc": margin_desc,
             "pos_usd": pos_usd,
             "sl": round(sl, 4),

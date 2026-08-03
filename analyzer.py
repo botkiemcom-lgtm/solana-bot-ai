@@ -61,13 +61,20 @@ class StrategyAnalyzer:
             
         self.last_insight = ema_trend
 
-        # 3. Tính toán Khối lượng, Vùng Kê Lệnh và Stoploss (V4 + Entry Zone + Hard SL 10 USD)
-        # Thay vì lấy giá đóng cửa, chúng ta tạo ra Vùng Giá Mua giữa EMA 21 và EMA 50
+        # 3. Thu hẹp Vùng Kê Lệnh bám sát EMA 21 (Đánh 1 lệnh)
         ema21 = last_closed_candle['ema_21']
         ema50 = last_closed_candle['ema_50']
+        distance = abs(ema21 - ema50)
         
-        zone_min = min(ema21, ema50)
-        zone_max = max(ema21, ema50)
+        if signal == "LONG":
+            # Giá tốt nhất là EMA 21, giá thấp nhất của vùng hẹp là EMA 21 - 20% khoảng cách
+            zone_max = ema21
+            zone_min = ema21 - (distance * 0.2)
+        else:
+            # SHORT: Giá tốt nhất là EMA 21, giá cao nhất của vùng hẹp là EMA 21 + 20% khoảng cách
+            zone_min = ema21
+            zone_max = ema21 + (distance * 0.2)
+            
         avg_entry = (zone_min + zone_max) / 2
         
         # AI chia vốn linh hoạt

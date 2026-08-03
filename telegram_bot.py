@@ -72,17 +72,17 @@ class TelegramNotifier:
             trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh SHORT (Bán), nên anh em phải nhập 2 số trên rồi bấm nút **MUA (BUY) MÀU XANH** để chốt lời nhé!"
             
         message = (
-            f"🦅 **PHÁT HIỆN KÈO BẮT ĐÁY (Khung 30m)** 🦅\n"
+            f"🦅 **PHÁT HIỆN KÈO BREAKOUT EMA 50 (Khung 30m)** 🦅\n"
             f"Cặp giao dịch: {symbol}\n"
             f"Tín hiệu: {icon}\n\n"
-            f"🎯 **Bước 1: KÊ 1 LỆNH (Market/Limit)**\n"
-            f"- Vùng Giá Cực Đẹp (Quanh EMA 21): `{signal_data.get('zone_min', 'N/A')}` đến `{signal_data.get('zone_max', 'N/A')}`\n"
+            f"🎯 **Bước 1: VÀO 1 LỆNH BẰNG GIÁ MARKET**\n"
+            f"- Giá Đóng Nến (Khuyến nghị): `{signal_data.get('avg_entry', 'N/A')}`\n"
             f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
             f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
             f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
             f"*(Lưu ý: Nếu giá thủng và chạm mốc SL này anh em chỉ mất đúng 10 USD)*\n\n"
             f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
-            f"Khi lệnh Limit đã khớp, vào mục Trailing Stop trên Binance cài:\n"
+            f"Vào mục Trailing Stop trên Binance cài:\n"
             f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"
             f"- Tỷ Lệ Dời (Callback Rate): `{signal_data.get('callback_rate', 'N/A')}%`\n"
             f"- Đánh dấu TICK vào ô **[Chỉ Giảm / Reduce Only]**\n"
@@ -260,7 +260,7 @@ class TelegramNotifier:
                         continue # Bỏ qua nếu không phải user được cấp quyền
 
                     if text == "/ping":
-                        self.send_message(chat_id, "🏓 Pong! Bot V6.0 (Kẻ Hủy Diệt Pullback) vẫn đang thức trắng đêm phục vụ sếp!")
+                        self.send_message(chat_id, "🏓 Pong! Bot V6.0 (Thợ Săn Nến Breakout) vẫn đang thức trắng đêm phục vụ sếp!")
                     elif text == "/status":
                         user_state = ACTIVE_USERS.get(str(chat_id), {"in_position": False})
                         mode = "🛡️ ĐANG BẢO VỆ LỆNH" if user_state["in_position"] else "⚔️ ĐANG SĂN MỒI"

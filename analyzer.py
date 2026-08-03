@@ -38,44 +38,57 @@ class StrategyAnalyzer:
         if len(df) < 2: return None
 
         last_closed_candle = df.iloc[-2]
+        prev_candle = df.iloc[-3]
         
         signal = None
         ema_trend = ""
         
         # 1. Bộ lọc La Bàn (Xu hướng tổng thể 30m)
-        uptrend = last_closed_candle['close'] > last_closed_candle['ema_50'] and last_closed_candle['btc_ema_50'] > 0 and df_btc.loc[last_closed_candle.name]['close'] > last_closed_candle['btc_ema_50']
-        downtrend = last_closed_candle['close'] < last_closed_candle['ema_50'] and last_closed_candle['btc_ema_50'] > 0 and df_btc.loc[last_closed_candle.name]['close'] < last_closed_candle['btc_ema_50']
+        btc_uptrend = last_closed_candle['close_btc'] > last_closed_candle['btc_ema_50'] if 'close_btc' in df.columns else df_btc.loc[last_closed_candle.name]['close'] > last_closed_candle['btc_ema_50']
+        btc_downtrend = last_closed_candle['close_btc'] < last_closed_candle['btc_ema_50'] if 'close_btc' in df.columns else df_btc.loc[last_closed_candle.name]['close'] < last_closed_candle['btc_ema_50']
 
         rsi_val = last_closed_candle['rsi']
+        ema_50 = last_closed_candle['ema_50']
+        prev_ema_50 = prev_candle['ema_50']
+        
+        # 2. ĐIỀU KIỆN CŨ: Cross-over EMA 50
+        crossover_up = last_closed_candle['close'] > ema_50 and prev_candle['close'] <= prev_ema_50
+        crossover_down = last_closed_candle['close'] < ema_50 and prev_candle['close'] >= prev_ema_50
+        
+        # 3. MÀNG LỌC NẾN SIÊU GỌN (Body > 65%)
+        candle_body = abs(last_closed_candle['close'] - last_closed_candle['open'])
+        candle_range = last_closed_candle['high'] - last_closed_candle['low']
+        is_strong_candle = False
+        if candle_range > 0:
+            is_strong_candle = (candle_body / candle_range) > 0.65
+            
+        is_green = last_closed_candle['close'] > last_closed_candle['open']
+        is_red = last_closed_candle['close'] < last_closed_candle['open']
 
-        # 2. Điểm bóp cò (Pullback chạm EMA 21)
-        if uptrend and last_closed_candle['low'] <= last_closed_candle['ema_21'] and rsi_val < 60:
-            signal = "LONG"
-            ema_trend = "Cả BTC và SOL đều đang Uptrend đẹp, RSI nhúng rát, dốc toàn lực vớt hàng giá rẻ!"
-        elif downtrend and last_closed_candle['high'] >= last_closed_candle['ema_21'] and rsi_val > 40:
-            signal = "SHORT"
-            ema_trend = "Cả BTC và SOL đều đang Downtrend mạnh, giá hồi lên kháng cự, chuẩn bị đập xuống!"
+        # KẾT HỢP
+        if btc_uptrend and crossover_up:
+            if is_strong_candle and is_green:
+                signal = "LONG"
+                ema_trend = "BULLISH BREAKOUT: Nến Xanh cực mạnh đâm thủng EMA 50, La bàn BTC thuận chiều!"
+            else:
+                self.last_insight = "Phá vỡ EMA 50 lên nhưng Nến lực yếu (Doji/Whipsaw), Hủy lệnh!"
+                return None
+                
+        elif btc_downtrend and crossover_down:
+            if is_strong_candle and is_red:
+                signal = "SHORT"
+                ema_trend = "BEARISH BREAKOUT: Nến Đỏ xả mạnh đâm thủng EMA 50, La bàn BTC thuận chiều!"
+            else:
+                self.last_insight = "Phá vỡ EMA 50 xuống nhưng Nến lực yếu (Doji/Whipsaw), Hủy lệnh!"
+                return None
         else:
             self.last_insight = f"Đang theo dõi chặt chẽ (RSI: {rsi_val:.1f})"
             return None
             
         self.last_insight = ema_trend
 
-        # 3. Thu hẹp Vùng Kê Lệnh bám sát EMA 21 (Đánh 1 lệnh)
-        ema21 = last_closed_candle['ema_21']
-        ema50 = last_closed_candle['ema_50']
-        distance = abs(ema21 - ema50)
-        
-        if signal == "LONG":
-            # Giá tốt nhất là EMA 21, giá thấp nhất của vùng hẹp là EMA 21 - 20% khoảng cách
-            zone_max = ema21
-            zone_min = ema21 - (distance * 0.2)
-        else:
-            # SHORT: Giá tốt nhất là EMA 21, giá cao nhất của vùng hẹp là EMA 21 + 20% khoảng cách
-            zone_min = ema21
-            zone_max = ema21 + (distance * 0.2)
-            
-        avg_entry = (zone_min + zone_max) / 2
+        # 4. Giá vào lệnh 1 Lệnh (Giá Market đóng nến)
+        entry_price = last_closed_candle['close']
         
         # AI chia vốn linh hoạt
         if (signal == "LONG" and rsi_val < 40) or (signal == "SHORT" and rsi_val > 60):
@@ -87,27 +100,27 @@ class StrategyAnalyzer:
             
         pos_usd = margin * 10 # Leverage 10x
         
-        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD (Dựa trên mức giá DCA trung bình)
+        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD
         sl_pct = 10.0 / pos_usd
         
         if signal == "LONG":
-            sl = avg_entry * (1 - sl_pct)
+            sl = entry_price * (1 - sl_pct)
         else:
-            sl = avg_entry * (1 + sl_pct)
+            sl = entry_price * (1 + sl_pct)
             
-        # 4. Tính toán Trailing Stop
-        risk_distance = abs(avg_entry - sl)
+        # 5. Tính toán Trailing Stop
+        risk_distance = abs(entry_price - sl)
         # Activation = 1.5R
-        activation_price = avg_entry + (risk_distance * 1.5) if signal == "LONG" else avg_entry - (risk_distance * 1.5)
+        activation_price = entry_price + (risk_distance * 1.5) if signal == "LONG" else entry_price - (risk_distance * 1.5)
         # Callback Rate = Kế thừa % khoảng cách SL (sl_pct * 100)
         callback_rate = round(sl_pct * 100, 2)
 
         return {
             "signal": signal,
-            "entry": f"{round(zone_min, 4)} - {round(zone_max, 4)}", # Dùng cho main.py log
-            "zone_min": round(zone_min, 4),
-            "zone_max": round(zone_max, 4),
-            "avg_entry": round(avg_entry, 4),
+            "entry": f"{round(entry_price, 4)}", # Dùng cho main.py log
+            "zone_min": round(entry_price, 4), # Dummy for backward compatibility
+            "zone_max": round(entry_price, 4), # Dummy for backward compatibility
+            "avg_entry": round(entry_price, 4),
             "margin_desc": margin_desc,
             "pos_usd": pos_usd,
             "sl": round(sl, 4),

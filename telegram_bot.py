@@ -64,51 +64,69 @@ class TelegramNotifier:
         ema_trend = signal_data['ema_trend']
         
         # --- V4: FOMAT MỚI CHỐNG MÙ CHỮ ---
-        if signal_data['signal'] == 'LONG':
-            icon = "🟢 LONG (Đu theo Trend Tăng)"
-            trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh LONG (Mua), nên anh em phải nhập 2 số trên rồi bấm nút **BÁN (SELL) MÀU ĐỎ** để chốt lời nhé!"
+        is_rejected = signal_data.get('ai_rejected', False)
+        
+        if is_rejected:
+            rejected_by = signal_data.get('rejected_by', 'AI Vệ Sĩ')
+            message = (
+                f"🛡️ **{rejected_by.upper()} ĐÃ CHẶN 1 KÈO DỎM** 🛡️\n"
+                f"Cặp giao dịch: {symbol}\n"
+                f"Tín hiệu ban đầu: {signal_data['signal']}\n\n"
+                f"❌ **Lý do từ chối:** {signal_data.get('reject_reason', '')}\n"
+                f"*(Sếp cứ yên tâm uống cafe, kèo này vào là mất tiền!)*"
+            )
+            reply_markup = None
         else:
-            icon = "🔴 SHORT (Bán Đỉnh)"
-            trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh SHORT (Bán), nên anh em phải nhập 2 số trên rồi bấm nút **MUA (BUY) MÀU XANH** để chốt lời nhé!"
-            
-        message = (
-            f"🦅 **PHÁT HIỆN KÈO BREAKOUT EMA 50 (Khung 30m)** 🦅\n"
-            f"Cặp giao dịch: {symbol}\n"
-            f"Tín hiệu: {icon}\n\n"
-            f"🎯 **Bước 1: VÀO 1 LỆNH BẰNG GIÁ MARKET**\n"
-            f"- Giá Đóng Nến (Khuyến nghị): `{signal_data.get('avg_entry', 'N/A')}`\n"
-            f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
-            f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
-            f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
-            f"*(Lưu ý: Nếu giá thủng và chạm mốc SL này anh em chỉ mất đúng 10 USD)*\n\n"
-            f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
-            f"Vào mục Trailing Stop trên Binance cài:\n"
-            f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"
-            f"- Tỷ Lệ Dời (Callback Rate): `{signal_data.get('callback_rate', 'N/A')}%`\n"
-            f"- Đánh dấu TICK vào ô **[Chỉ Giảm / Reduce Only]**\n"
-            f"{trailing_instruction}\n\n"
-            f"🤖 *Nhận định:* \"{signal_data.get('ema_trend', '')}\"\n"
-        )
-
-        reply_markup = {
-            "inline_keyboard": [
-                [{"text": "✅ Đã vào lệnh (Bật Vệ Sĩ)", "callback_data": f"ENTERED_{signal_type}"}]
-            ]
-        }
+            if signal_data['signal'] == 'LONG':
+                icon = "🟢 LONG (Đu theo Trend Tăng)"
+                trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh LONG (Mua), nên anh em phải nhập 2 số trên rồi bấm nút **BÁN (SELL) MÀU ĐỎ** để chốt lời nhé!"
+            else:
+                icon = "🔴 SHORT (Bán Đỉnh)"
+                trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh SHORT (Bán), nên anh em phải nhập 2 số trên rồi bấm nút **MUA (BUY) MÀU XANH** để chốt lời nhé!"
+                
+            title = f"🦅 **PHÁT HIỆN KÈO BREAKOUT EMA 50 (Khung 30m)** 🦅\n"
+            if signal_data.get('gemini_failed'):
+                title += f"⚠️ **CHÚ Ý:** Vệ Sĩ Gemini đang bị liệt, kèo này chỉ được bảo vệ 1 lớp bởi Vệ Sĩ ML.\n"
+                
+            message = (
+                f"{title}"
+                f"Cặp giao dịch: {symbol}\n"
+                f"Tín hiệu: {icon}\n\n"
+                f"🎯 **Bước 1: VÀO 1 LỆNH BẰNG GIÁ MARKET**\n"
+                f"- Giá Đóng Nến (Khuyến nghị): `{signal_data.get('avg_entry', 'N/A')}`\n"
+                f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
+                f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
+                f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
+                f"*(Lưu ý: Nếu giá thủng và chạm mốc SL này anh em chỉ mất đúng 10 USD)*\n\n"
+                f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
+                f"Vào mục Trailing Stop trên Binance cài:\n"
+                f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"
+                f"- Tỷ Lệ Dời (Callback Rate): `{signal_data.get('callback_rate', 'N/A')}%`\n"
+                f"- Đánh dấu TICK vào ô **[Chỉ Giảm / Reduce Only]**\n"
+                f"{trailing_instruction}\n\n"
+                f"🤖 *Nhận định:* \"{signal_data.get('ema_trend', '')}\"\n"
+            )
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": "✅ Đã vào lệnh (Bật Vệ Sĩ)", "callback_data": f"ENTERED_{signal_type}"}]
+                ]
+            }
 
         payload = {
             "chat_id": target_chat_id,
             "text": message,
             "parse_mode": "Markdown",
-            "reply_markup": reply_markup
         }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
 
         try:
             response = requests.post(self.api_url, json=payload)
             if response.status_code == 200:
                 print(f"Đã gửi tín hiệu Telegram thành công cho {target_chat_id}!")
-                # Kích hoạt cuộc gọi điện thoại cho từng người
-                self.make_call(target_chat_id, symbol, signal_type)
+                # Chỉ kích hoạt cuộc gọi điện thoại nếu kèo được duyệt
+                if not is_rejected:
+                    self.make_call(target_chat_id, symbol, signal_type)
             else:
                 print(f"Lỗi gửi Telegram: {response.text}")
         except Exception as e:

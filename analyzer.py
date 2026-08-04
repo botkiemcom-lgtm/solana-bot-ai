@@ -35,7 +35,7 @@ class StrategyAnalyzer:
 
         # Gộp dữ liệu
         df = df.join(df_btc[['btc_ema_50']], how='left').dropna()
-        if len(df) < 2: return None
+        if len(df) < 3: return None
 
         last_closed_candle = df.iloc[-2]
         prev_candle = df.iloc[-3]
@@ -90,17 +90,13 @@ class StrategyAnalyzer:
         # 4. Giá vào lệnh 1 Lệnh (Giá Market đóng nến)
         entry_price = last_closed_candle['close']
         
-        # AI chia vốn linh hoạt
-        if (signal == "LONG" and rsi_val < 40) or (signal == "SHORT" and rsi_val > 60):
-            margin = 200.0
-            margin_desc = "200 USD (Kèo siêu đẹp - Đánh Full Vốn)"
-        else:
-            margin = 100.0
-            margin_desc = "100 USD (Kèo rủi ro vừa - Đánh Nửa Vốn)"
+        # Quản trị rủi ro khắt khe: Đi lệnh tối đa 30$ theo lệnh sếp
+        margin = 30.0
+        margin_desc = "30 USD (Test Bot / Quản trị vốn an toàn)"
             
         pos_usd = margin * 10 # Leverage 10x
         
-        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD
+        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD (Có thể tùy chỉnh sau)
         sl_pct = 10.0 / pos_usd
         
         if signal == "LONG":
@@ -108,18 +104,38 @@ class StrategyAnalyzer:
         else:
             sl = entry_price * (1 + sl_pct)
             
+        # Gọi Hệ Thống AI Vệ Sĩ 2 Lớp để đánh giá Breakout
+        ai_verdict = self.ask_ai_risk_manager(df, signal)
+        
         # 5. Tính toán Trailing Stop
         risk_distance = abs(entry_price - sl)
-        # Activation = 1.5R
         activation_price = entry_price + (risk_distance * 1.5) if signal == "LONG" else entry_price - (risk_distance * 1.5)
-        # Callback Rate = Kế thừa % khoảng cách SL (sl_pct * 100)
         callback_rate = round(sl_pct * 100, 2)
+        
+        is_rejected = False
+        reject_reason = ""
+        rejected_by = ""
+        gemini_failed = ai_verdict.get("gemini_failed", False)
+        
+        if not ai_verdict.get('approved', False):
+            # Bị AI gạch kèo
+            reject_reason = ai_verdict.get('reason', 'Rủi ro cao')
+            rejected_by = ai_verdict.get('rejected_by', 'Hệ Thống')
+            self.last_insight = f"❌ {rejected_by} TỪ CHỐI: {reject_reason}"
+            is_rejected = True
+        else:
+            # Nếu AI duyệt
+            if gemini_failed:
+                ema_trend = f"{ema_trend}\n⚠️ {ai_verdict.get('reason')}"
+            else:
+                ema_trend = f"{ema_trend}\n✅ CẢ 2 LỚP VỆ SĨ (ML & GEMINI) ĐỀU DUYỆT: {ai_verdict.get('reason', 'Đủ an toàn để giao dịch.')}"
+            self.last_insight = ema_trend
 
         return {
             "signal": signal,
-            "entry": f"{round(entry_price, 4)}", # Dùng cho main.py log
-            "zone_min": round(entry_price, 4), # Dummy for backward compatibility
-            "zone_max": round(entry_price, 4), # Dummy for backward compatibility
+            "entry": f"{round(entry_price, 4)}",
+            "zone_min": round(entry_price, 4),
+            "zone_max": round(entry_price, 4),
             "avg_entry": round(entry_price, 4),
             "margin_desc": margin_desc,
             "pos_usd": pos_usd,
@@ -127,7 +143,11 @@ class StrategyAnalyzer:
             "activation_price": round(activation_price, 4),
             "callback_rate": callback_rate,
             "rsi": round(rsi_val, 1),
-            "ema_trend": ema_trend
+            "ema_trend": ema_trend,
+            "ai_rejected": is_rejected,
+            "reject_reason": reject_reason,
+            "rejected_by": rejected_by,
+            "gemini_failed": gemini_failed
         }
 
     def monitor_trade(self, df_5m, df_30m, df_1h, df_btc_30m, active_trade):
@@ -136,3 +156,91 @@ class StrategyAnalyzer:
         Hàm này giữ nguyên cấu trúc để main.py không bị lỗi.
         """
         return None
+
+    def ask_ai_risk_manager(self, df, current_signal):
+        import os
+        import pandas as pd
+        import joblib
+        import json
+        import google.generativeai as genai
+        
+        # === LỚP BẢO VỆ 1: MACHINE LEARNING (XGBoost/Random Forest) ===
+        try:
+            model_path = 'market_regime_model.pkl'
+            if os.path.exists(model_path):
+                clf = joblib.load(model_path)
+                
+                # Tính toán Features cho nến hiện tại
+                ema_21_slope = (df['ema_21'].iloc[-1] - df['ema_21'].iloc[-6]) / df['ema_21'].iloc[-6] * 100
+                ema_50_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-6]) / df['ema_50'].iloc[-6] * 100
+                ema_dist = (df['ema_21'].iloc[-1] - df['ema_50'].iloc[-1]) / df['ema_50'].iloc[-1] * 100
+                
+                import ta
+                bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+                bb_width = (bb.bollinger_hband().iloc[-1] - bb.bollinger_lband().iloc[-1]) / df['close'].iloc[-1] * 100
+                atr_norm = df['atr'].iloc[-1] / df['close'].iloc[-1] * 100
+                
+                vol_ma20 = df['volume'].rolling(20).mean().iloc[-1]
+                vol_ratio = df['volume'].iloc[-1] / vol_ma20 if vol_ma20 > 0 else 1.0
+                rsi_val = df['rsi'].iloc[-1]
+                
+                X_new = pd.DataFrame([[ema_21_slope, ema_50_slope, ema_dist, bb_width, atr_norm, vol_ratio, rsi_val]], 
+                                     columns=['ema_21_slope', 'ema_50_slope', 'ema_dist', 'bb_width', 'atr_norm', 'vol_ratio', 'rsi'])
+                                     
+                pred = clf.predict(X_new)[0]
+                
+                if pred == 0:
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Biến động Sideway/Nhiễu loạn, không có xu hướng rõ ràng."}
+                elif pred == 1 and current_signal == "SHORT":
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Uptrend, đánh SHORT ngược xu hướng rất nguy hiểm!"}
+                elif pred == 2 and current_signal == "LONG":
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Downtrend, đánh LONG ngược xu hướng rất nguy hiểm!"}
+        except Exception as e:
+            print(f"Lỗi AI Machine Learning (Risk Manager): {e}")
+            # Nếu ML lỗi thì vẫn đi tiếp tới Gemini
+            
+        # === LỚP BẢO VỆ 2: GEMINI LLM (Đọc nến) ===
+        try:
+            genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+            model = genai.GenerativeModel('gemini-flash-latest')
+            
+            recent_df = df.tail(20).copy()
+            data_str = "Dữ liệu 20 nến 30m gần nhất (Mở, Cao, Thấp, Đóng, Volume, RSI, EMA50, ATR):\n"
+            for index, row in recent_df.iterrows():
+                rsi_v = row['rsi'] if 'rsi' in row and not pd.isna(row['rsi']) else 50.0
+                ema_v = row['ema_50'] if 'ema_50' in row and not pd.isna(row['ema_50']) else row['close']
+                atr_v = row['atr'] if 'atr' in row and not pd.isna(row['atr']) else 0.0
+                data_str += f"- Close: {row['close']:.2f}, Vol: {row['volume']:.2f}, RSI: {rsi_v:.1f}, EMA50: {ema_v:.2f}, ATR: {atr_v:.2f}\n"
+                
+            prompt = f"""
+            Đóng vai một Chuyên gia Quản trị Rủi ro (Risk Manager) khắt khe cho giao dịch Crypto.
+            Hệ thống kỹ thuật vừa phát hiện tín hiệu: {current_signal}.
+            
+            Dựa vào 20 cây nến gần nhất dưới đây, hãy đánh giá cấu trúc giá, động lượng (Momentum) và biến động (ATR, Vol).
+            Thị trường đang có xu hướng (Trend) rõ ràng, hay đang nén đi ngang (Sideway Choppy)?
+            Tín hiệu Breakout này có đáng tin cậy không (tỷ lệ thắng > 60%), hay chỉ là bẫy Whipsaw?
+            
+            BẮT BUỘC trả về ĐÚNG định dạng JSON như sau, không kèm bất kỳ văn bản nào khác:
+            {{"approved": true_or_false, "reason": "Lý do ngắn gọn bằng tiếng Việt"}}
+            
+            {data_str}
+            """
+            
+            response = model.generate_content(prompt)
+            res_text = response.text.replace("```json", "").replace("```", "").strip()
+            res_json = json.loads(res_text)
+            
+            if not res_json.get('approved', False):
+                return {"approved": False, "rejected_by": "Vệ Sĩ Ngôn Ngữ (Gemini AI)", "reason": res_json.get('reason', 'Rủi ro cao')}
+            else:
+                return {"approved": True, "reason": res_json.get('reason', 'Đủ an toàn để giao dịch')}
+                
+        except Exception as e:
+            print(f"Lỗi gọi Gemini API (Risk Manager): {e}")
+            # TỰ ĐỘNG SINH TỒN: Vì ML đã duyệt ở trên rồi, nên nếu Gemini chết, ta vẫn cho phép giao dịch nhưng báo cờ gemini_failed
+            return {
+                "approved": True, 
+                "reason": "Vệ sĩ Gemini mất kết nối, kèo được duyệt độc lập bởi Vệ sĩ ML.",
+                "gemini_failed": True,
+                "error_detail": str(e)
+            }

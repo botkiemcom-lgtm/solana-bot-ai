@@ -7,3 +7,5 @@ schedule==1.2.2
 scikit-learn
 joblib
 xgboost
+google-generativeai
+requests

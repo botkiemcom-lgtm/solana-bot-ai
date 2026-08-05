@@ -29,6 +29,7 @@ class StrategyAnalyzer:
         
         atr_indicator = ta.volatility.AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=self.atr_period)
         df['atr'] = atr_indicator.average_true_range()
+        df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
 
         # Tính toán chỉ báo BTC
         df_btc['btc_ema_50'] = ta.trend.ema_indicator(df_btc['close'], window=50)
@@ -48,12 +49,18 @@ class StrategyAnalyzer:
         btc_downtrend = last_closed_candle['close_btc'] < last_closed_candle['btc_ema_50'] if 'close_btc' in df.columns else df_btc.loc[last_closed_candle.name]['close'] < last_closed_candle['btc_ema_50']
 
         rsi_val = last_closed_candle['rsi']
+        adx_val = last_closed_candle['adx']
         ema_50 = last_closed_candle['ema_50']
         prev_ema_50 = prev_candle['ema_50']
         
         # 2. ĐIỀU KIỆN CŨ: Cross-over EMA 50
         crossover_up = last_closed_candle['close'] > ema_50 and prev_candle['close'] <= prev_ema_50
         crossover_down = last_closed_candle['close'] < ema_50 and prev_candle['close'] >= prev_ema_50
+        
+        # KIỂM TRA BỘ LỌC SIDEWAY (ADX)
+        if not pd.isna(adx_val) and adx_val < 25:
+            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 25), Hủy lệnh để tránh Whipsaw!"
+            return None
         
         # 3. MÀNG LỌC NẾN SIÊU GỌN (Body > 65%)
         candle_body = abs(last_closed_candle['close'] - last_closed_candle['open'])
@@ -173,6 +180,11 @@ class StrategyAnalyzer:
                 # Tính toán Features cho nến hiện tại
                 ema_21_slope = (df['ema_21'].iloc[-1] - df['ema_21'].iloc[-6]) / df['ema_21'].iloc[-6] * 100
                 ema_50_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-6]) / df['ema_50'].iloc[-6] * 100
+                
+                # Độ dốc 20 nến
+                ema_21_slope_20 = (df['ema_21'].iloc[-1] - df['ema_21'].iloc[-21]) / df['ema_21'].iloc[-21] * 100
+                ema_50_slope_20 = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-21]) / df['ema_50'].iloc[-21] * 100
+                
                 ema_dist = (df['ema_21'].iloc[-1] - df['ema_50'].iloc[-1]) / df['ema_50'].iloc[-1] * 100
                 
                 import ta
@@ -183,9 +195,10 @@ class StrategyAnalyzer:
                 vol_ma20 = df['volume'].rolling(20).mean().iloc[-1]
                 vol_ratio = df['volume'].iloc[-1] / vol_ma20 if vol_ma20 > 0 else 1.0
                 rsi_val = df['rsi'].iloc[-1]
+                adx_val = df['adx'].iloc[-1]
                 
-                X_new = pd.DataFrame([[ema_21_slope, ema_50_slope, ema_dist, bb_width, atr_norm, vol_ratio, rsi_val]], 
-                                     columns=['ema_21_slope', 'ema_50_slope', 'ema_dist', 'bb_width', 'atr_norm', 'vol_ratio', 'rsi'])
+                X_new = pd.DataFrame([[ema_21_slope, ema_50_slope, ema_21_slope_20, ema_50_slope_20, ema_dist, bb_width, atr_norm, vol_ratio, rsi_val, adx_val]], 
+                                     columns=['ema_21_slope', 'ema_50_slope', 'ema_21_slope_20', 'ema_50_slope_20', 'ema_dist', 'bb_width', 'atr_norm', 'vol_ratio', 'rsi', 'adx'])
                                      
                 pred = clf.predict(X_new)[0]
                 

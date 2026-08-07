@@ -11,7 +11,7 @@ class StrategyAnalyzer:
         self.atr_period = atr_period
         self.last_insight = "Chưa có dữ liệu phân tích"
 
-    def analyze(self, df_5m, df_30m, df_1h, df_btc_30m):
+    def analyze(self, df_5m, df_15m, df_1h, df_btc_15m):
         """
         Logic Bắt Sóng Lớn (Swing Trading) trên khung 15m.
         """

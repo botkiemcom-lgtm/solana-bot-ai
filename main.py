@@ -22,7 +22,7 @@ def keep_alive():
     server.serve_forever()
 
 def run_bot_job():
-    print("👀 Đang quét dữ liệu SOL/USDT khung 30m (Bắt Đáy Pullback)...")
+    print("👀 Đang quét dữ liệu SOL/USDT khung 15m (Swing Trading)...")
     vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
     telegram_bot.SYSTEM_STATUS["last_check"] = vn_time.strftime("%Y-%m-%d %H:%M:%S")
     
@@ -33,11 +33,11 @@ def run_bot_job():
 
     # 2. Lấy dữ liệu đa khung thời gian (5m, 30m, 1h, và BTC 30m)
     df_5m = fetcher.fetch_ohlcv(symbol="SOL/USDT:USDT", timeframe="5m", limit=100)
-    df_30m = fetcher.fetch_ohlcv(symbol="SOL/USDT:USDT", timeframe="30m", limit=100)
+    df_15m = fetcher.fetch_ohlcv(symbol="SOL/USDT:USDT", timeframe="15m", limit=100)
     df_1h = fetcher.fetch_ohlcv(symbol="SOL/USDT:USDT", timeframe="1h", limit=100)
-    df_btc_30m = fetcher.fetch_ohlcv(symbol="BTC/USDT:USDT", timeframe="30m", limit=100)
+    df_btc_15m = fetcher.fetch_ohlcv(symbol="BTC/USDT:USDT", timeframe="15m", limit=100)
     
-    if df_5m is not None and df_30m is not None and df_1h is not None and df_btc_30m is not None:
+    if df_5m is not None and df_15m is not None and df_1h is not None and df_btc_15m is not None:
         current_exchange = fetcher.last_successful_exchange
         telegram_bot.SYSTEM_STATUS["status"] = f"🟢 Đang hoạt động tốt (Nguồn: {current_exchange})"
         telegram_bot.SYSTEM_STATUS["last_error"] = "Không có"
@@ -47,7 +47,7 @@ def run_bot_job():
             # Nếu người này đang Gồng Lệnh
             if user_state["in_position"]:
                 print(f"🛡️ Đang trong chế độ bảo vệ lệnh {user_state['type']} cho {chat_id}...")
-                warning = analyzer.monitor_trade(df_5m, df_30m, df_1h, df_btc_30m, user_state)
+                warning = analyzer.monitor_trade(df_5m, df_15m, df_1h, df_btc_15m, user_state)
                 if warning:
                     print(f"🚨 Cảnh báo từ AI cho {chat_id}: Phải thoát hàng sớm!")
                     reply_markup = {
@@ -58,7 +58,7 @@ def run_bot_job():
                     notifier.send_message(chat_id, warning, reply_markup=reply_markup)
             else:
                 # Nếu người này đang Săn Mồi
-                result = analyzer.analyze(df_5m, df_30m, df_1h, df_btc_30m)
+                result = analyzer.analyze(df_5m, df_15m, df_1h, df_btc_15m)
                 
                 # Lấy insight từ AI
                 telegram_bot.SYSTEM_STATUS["market_insight"] = analyzer.last_insight
@@ -96,7 +96,7 @@ def main():
     
     # Gửi tin nhắn khởi động cho tất cả user
     for cid in notifier.chat_ids:
-        notifier.send_message(cid, "🚀 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 30m - Bắt Đáy Pullback). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
+        notifier.send_message(cid, "🚀 **Bot Trade Future AI đã khởi động thành công!**\n\nBot đang tiến hành theo dõi cặp **SOL/USDT** (Khung 15m - Swing Trading). Nếu có tín hiệu tốt, bot sẽ lập tức báo về đây cho sếp!")
     
     # Chạy ngay lần đầu tiên khi vừa bật bot
     run_bot_job()

@@ -13,14 +13,14 @@ class StrategyAnalyzer:
 
     def analyze(self, df_5m, df_30m, df_1h, df_btc_30m):
         """
-        Logic Bắt Đáy Pullback trên khung 30m.
+        Logic Bắt Sóng Lớn (Swing Trading) trên khung 15m.
         """
-        if df_30m is None or len(df_30m) < 50 or df_btc_30m is None or len(df_btc_30m) < 50:
+        if df_15m is None or len(df_15m) < 50 or df_btc_15m is None or len(df_btc_15m) < 50:
             return None
 
         # Đồng bộ thời gian để join
-        df = df_30m.copy()
-        df_btc = df_btc_30m.copy()
+        df = df_15m.copy()
+        df_btc = df_btc_15m.copy()
 
         # Tính toán chỉ báo SOL
         df['ema_21'] = ta.trend.ema_indicator(df['close'], window=self.ema_mid)
@@ -58,8 +58,8 @@ class StrategyAnalyzer:
         crossover_down = last_closed_candle['close'] < ema_50 and prev_candle['close'] >= prev_ema_50
         
         # KIỂM TRA BỘ LỌC SIDEWAY (ADX)
-        if not pd.isna(adx_val) and adx_val < 25:
-            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 25), Hủy lệnh để tránh Whipsaw!"
+        if not pd.isna(adx_val) and adx_val < 15:
+            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 15), Hủy lệnh để tránh Whipsaw!"
             return None
         
         # 3. MÀNG LỌC NẾN SIÊU GỌN (Body > 65%)
@@ -96,33 +96,45 @@ class StrategyAnalyzer:
 
         # 4. Giá vào lệnh 1 Lệnh (Giá Market đóng nến)
         entry_price = last_closed_candle['close']
+        atr_val = last_closed_candle['atr']
         
-        # Quản trị rủi ro khắt khe: Đi lệnh tối đa 30$ theo lệnh sếp
-        margin = 30.0
-        margin_desc = "30 USD (Test Bot / Quản trị vốn an toàn)"
-            
-        pos_usd = margin * 10 # Leverage 10x
-        
-        # Tính khoảng cách SL % sao cho nếu dính SL thì mất ĐÚNG 10 USD (Có thể tùy chỉnh sau)
-        sl_pct = 10.0 / pos_usd
-        
-        if signal == "LONG":
-            sl = entry_price * (1 - sl_pct)
-        else:
-            sl = entry_price * (1 + sl_pct)
-            
         # Gọi Hệ Thống AI Vệ Sĩ 2 Lớp để đánh giá Breakout
         ai_verdict = self.ask_ai_risk_manager(df, signal)
-        
-        # 5. Tính toán Trailing Stop
-        risk_distance = abs(entry_price - sl)
-        activation_price = entry_price + (risk_distance * 1.5) if signal == "LONG" else entry_price - (risk_distance * 1.5)
-        callback_rate = round(sl_pct * 100, 2)
         
         is_rejected = False
         reject_reason = ""
         rejected_by = ""
         gemini_failed = ai_verdict.get("gemini_failed", False)
+        
+        # Mức rủi ro theo ML
+        confidence = ai_verdict.get("confidence", 0)
+        risk_level = "Rủi ro cao"
+        risk_amount = 10.0
+        
+        if confidence >= 70 and adx_val >= 35:
+            risk_level = 'Cực kỳ ngon'
+            risk_amount = 15.0
+        elif confidence >= 55 and adx_val >= 25:
+            risk_level = 'Trung bình'
+            risk_amount = 10.0
+        else:
+            risk_level = 'Rủi ro cao'
+            risk_amount = 10.0
+            
+        sl_dist = 2.0 * atr_val
+        
+        if signal == "LONG":
+            sl = entry_price - sl_dist
+            tp1 = entry_price + sl_dist * 1.5 
+            tp2 = entry_price + sl_dist * 3.0 
+        else:
+            sl = entry_price + sl_dist
+            tp1 = entry_price - sl_dist * 1.5 
+            tp2 = entry_price - sl_dist * 3.0 
+            
+        sl_pct = abs(entry_price - sl) / entry_price
+        pos_usd = risk_amount / sl_pct if sl_pct > 0 else 0
+        margin = pos_usd / 10 # 10x leverage
         
         if not ai_verdict.get('approved', False):
             # Bị AI gạch kèo
@@ -141,14 +153,11 @@ class StrategyAnalyzer:
         return {
             "signal": signal,
             "entry": f"{round(entry_price, 4)}",
-            "zone_min": round(entry_price, 4),
-            "zone_max": round(entry_price, 4),
-            "avg_entry": round(entry_price, 4),
-            "margin_desc": margin_desc,
-            "pos_usd": pos_usd,
+            "tp1": f"{round(tp1, 4)}",
+            "tp2": f"{round(tp2, 4)}",
+            "margin": f"{round(margin, 2)}",
+            "risk_level": risk_level,
             "sl": round(sl, 4),
-            "activation_price": round(activation_price, 4),
-            "callback_rate": callback_rate,
             "rsi": round(rsi_val, 1),
             "ema_trend": ema_trend,
             "ai_rejected": is_rejected,
@@ -157,7 +166,7 @@ class StrategyAnalyzer:
             "gemini_failed": gemini_failed
         }
 
-    def monitor_trade(self, df_5m, df_30m, df_1h, df_btc_30m, active_trade):
+    def monitor_trade(self, df_5m, df_15m, df_1h, df_btc_15m, active_trade):
         """
         Tạm thời tắt AI cảnh báo thoát sớm vì chúng ta đã dùng Trailing Stop của sàn Binance.
         Hàm này giữ nguyên cấu trúc để main.py không bị lỗi.
@@ -173,7 +182,8 @@ class StrategyAnalyzer:
         
         # === LỚP BẢO VỆ 1: MACHINE LEARNING (XGBoost/Random Forest) ===
         try:
-            model_path = 'market_regime_model.pkl'
+            model_path = 'market_regime_model_swing_15m.pkl'
+            confidence = 0
             if os.path.exists(model_path):
                 clf = joblib.load(model_path)
                 
@@ -201,6 +211,8 @@ class StrategyAnalyzer:
                                      columns=['ema_21_slope', 'ema_50_slope', 'ema_21_slope_20', 'ema_50_slope_20', 'ema_dist', 'bb_width', 'atr_norm', 'vol_ratio', 'rsi', 'adx'])
                                      
                 pred = clf.predict(X_new)[0]
+                probs = clf.predict_proba(X_new)[0]
+                confidence = probs[pred] * 100
                 
                 if pred == 0:
                     return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Biến động Sideway/Nhiễu loạn, không có xu hướng rõ ràng."}
@@ -218,7 +230,7 @@ class StrategyAnalyzer:
             model = genai.GenerativeModel('gemini-flash-latest')
             
             recent_df = df.tail(20).copy()
-            data_str = "Dữ liệu 20 nến 30m gần nhất (Mở, Cao, Thấp, Đóng, Volume, RSI, EMA50, ATR):\n"
+            data_str = "Dữ liệu 20 nến 15m gần nhất (Mở, Cao, Thấp, Đóng, Volume, RSI, EMA50, ATR):\n"
             for index, row in recent_df.iterrows():
                 rsi_v = row['rsi'] if 'rsi' in row and not pd.isna(row['rsi']) else 50.0
                 ema_v = row['ema_50'] if 'ema_50' in row and not pd.isna(row['ema_50']) else row['close']
@@ -227,11 +239,11 @@ class StrategyAnalyzer:
                 
             prompt = f"""
             Đóng vai một Chuyên gia Quản trị Rủi ro (Risk Manager) khắt khe cho giao dịch Crypto.
-            Hệ thống kỹ thuật vừa phát hiện tín hiệu: {current_signal}.
+            Hệ thống kỹ thuật vừa phát hiện tín hiệu: {current_signal} (Dự định Swing Trading giữ lệnh 12-24h).
             
             Dựa vào 20 cây nến gần nhất dưới đây, hãy đánh giá cấu trúc giá, động lượng (Momentum) và biến động (ATR, Vol).
-            Thị trường đang có xu hướng (Trend) rõ ràng, hay đang nén đi ngang (Sideway Choppy)?
-            Tín hiệu Breakout này có đáng tin cậy không (tỷ lệ thắng > 60%), hay chỉ là bẫy Whipsaw?
+            Thị trường đang có xu hướng (Trend) rõ ràng để gồng lãi 12-24 tiếng, hay đang nén đi ngang (Sideway Choppy)?
+            Tín hiệu Breakout này có đáng tin cậy không, hay chỉ là bẫy Whipsaw quét Stoploss?
             
             BẮT BUỘC trả về ĐÚNG định dạng JSON như sau, không kèm bất kỳ văn bản nào khác:
             {{"approved": true_or_false, "reason": "Lý do ngắn gọn bằng tiếng Việt"}}
@@ -244,9 +256,9 @@ class StrategyAnalyzer:
             res_json = json.loads(res_text)
             
             if not res_json.get('approved', False):
-                return {"approved": False, "rejected_by": "Vệ Sĩ Ngôn Ngữ (Gemini AI)", "reason": res_json.get('reason', 'Rủi ro cao')}
+                return {"approved": False, "rejected_by": "Vệ Sĩ Ngôn Ngữ (Gemini AI)", "reason": res_json.get('reason', 'Rủi ro cao'), "confidence": confidence}
             else:
-                return {"approved": True, "reason": res_json.get('reason', 'Đủ an toàn để giao dịch')}
+                return {"approved": True, "reason": res_json.get('reason', 'Đủ an toàn để giao dịch'), "confidence": confidence}
                 
         except Exception as e:
             print(f"Lỗi gọi Gemini API (Risk Manager): {e}")
@@ -255,5 +267,6 @@ class StrategyAnalyzer:
                 "approved": True, 
                 "reason": "Vệ sĩ Gemini mất kết nối, kèo được duyệt độc lập bởi Vệ sĩ ML.",
                 "gemini_failed": True,
+                "confidence": confidence,
                 "error_detail": str(e)
             }

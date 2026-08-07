@@ -84,27 +84,25 @@ class TelegramNotifier:
                 icon = "🔴 SHORT (Bán Đỉnh)"
                 trailing_instruction = "⚠️ **QUAN TRỌNG:** Vì đây là lệnh SHORT (Bán), nên anh em phải nhập 2 số trên rồi bấm nút **MUA (BUY) MÀU XANH** để chốt lời nhé!"
                 
-            title = f"🦅 **PHÁT HIỆN KÈO BREAKOUT EMA 50 (Khung 30m)** 🦅\n"
+            title = f"🦅 **PHÁT HIỆN KÈO SWING TRADING (Khung 15m)** 🦅\n"
             if signal_data.get('gemini_failed'):
-                title += f"⚠️ **CHÚ Ý:** Vệ Sĩ Gemini đang bị liệt, kèo này chỉ được bảo vệ 1 lớp bởi Vệ Sĩ ML.\n"
+                title += f"⚠️ **CHÚ Ý:** Vệ Sĩ Gemini đang bị liệt, kèo này chỉ được bảo vệ bởi Vệ Sĩ ML.\n"
+                approved_by = "Chỉ có Vệ Sĩ ML"
+            else:
+                approved_by = "Cả 2 Vệ Sĩ (ML + Gemini)"
                 
             message = (
                 f"{title}"
                 f"Cặp giao dịch: {symbol}\n"
                 f"Tín hiệu: {icon}\n\n"
-                f"🎯 **Bước 1: VÀO 1 LỆNH BẰNG GIÁ MARKET**\n"
-                f"- Giá Đóng Nến (Khuyến nghị): `{signal_data.get('avg_entry', 'N/A')}`\n"
-                f"- Mức Ký Quỹ (Gợi ý): `{signal_data.get('margin_desc', '100 USD')}`\n"
-                f"- Nhập chính xác Quy mô Vị thế (Size 10x): `{signal_data.get('pos_usd', '1000')} USD`\n"
-                f"- 🛡️ Nhập Stoploss Tuyệt Đối: `{signal_data['sl']}`\n"
-                f"*(Lưu ý: Nếu giá thủng và chạm mốc SL này anh em chỉ mất đúng 10 USD)*\n\n"
-                f"🚀 **Bước 2: CÀI GỒNG LÃI TỰ ĐỘNG (Trailing Stop)**\n"
-                f"Vào mục Trailing Stop trên Binance cài:\n"
-                f"- Giá Kích Hoạt (Activation Price): `{signal_data.get('activation_price', 'N/A')}`\n"
-                f"- Tỷ Lệ Dời (Callback Rate): `{signal_data.get('callback_rate', 'N/A')}%`\n"
-                f"- Đánh dấu TICK vào ô **[Chỉ Giảm / Reduce Only]**\n"
-                f"{trailing_instruction}\n\n"
-                f"🤖 *Nhận định:* \"{signal_data.get('ema_trend', '')}\"\n"
+                f"🎯 **Vùng Vào Lệnh:** `{signal_data.get('entry', 'N/A')}`\n"
+                f"🛡️ **Mức Cắt Lỗ (Bắt buộc):** `{signal_data['sl']}`\n"
+                f"💰 **TP 1 (Chốt 50% & Dời SL Hòa Vốn):** `{signal_data.get('tp1', 'N/A')}`\n"
+                f"🚀 **TP 2 (Chốt 50% còn lại):** `{signal_data.get('tp2', 'N/A')}`\n"
+                f"⚖️ **Cấp độ rủi ro:** `{signal_data.get('risk_level', 'N/A')}`\n"
+                f"💵 **Tiền Ký Quỹ Gợi Ý (Kéo đòn bẩy 10x):** `{signal_data.get('margin', 'N/A')} USD`\n\n"
+                f"👤 *Người duyệt kèo:* **{approved_by}**\n"
+                f"🤖 *Nhận định AI:* \"{signal_data.get('ema_trend', '')}\"\n"
             )
             reply_markup = {
                 "inline_keyboard": [

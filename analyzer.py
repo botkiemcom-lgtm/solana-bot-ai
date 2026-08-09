@@ -63,8 +63,8 @@ class StrategyAnalyzer:
         crossover_down = last_closed_candle['close'] < ema_50 and prev_candle['close'] >= prev_ema_50
         
         # KIỂM TRA BỘ LỌC SIDEWAY (ADX)
-        if not pd.isna(adx_val) and adx_val < 15:
-            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 15), Hủy lệnh để tránh Whipsaw!"
+        if not pd.isna(adx_val) and adx_val < 10:
+            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 10), Hủy lệnh để tránh Whipsaw!"
             return None
         
         # 3. MÀNG LỌC NẾN SIÊU GỌN (Body > 65%)

@@ -10,6 +10,7 @@ class StrategyAnalyzer:
         self.rsi_period = rsi_period
         self.atr_period = atr_period
         self.last_insight = "Chưa có dữ liệu phân tích"
+        self.last_evaluated_time = None
 
     def analyze(self, df_5m, df_15m, df_1h, df_btc_15m):
         """
@@ -41,6 +42,10 @@ class StrategyAnalyzer:
         last_closed_candle = df.iloc[-2]
         prev_candle = df.iloc[-3]
         
+        # CHỐNG SPAM: Nếu đã đánh giá nến này rồi thì bỏ qua
+        if self.last_evaluated_time == last_closed_candle.name:
+            return None
+            
         signal = None
         ema_trend = ""
         
@@ -142,6 +147,9 @@ class StrategyAnalyzer:
             rejected_by = ai_verdict.get('rejected_by', 'Hệ Thống')
             self.last_insight = f"❌ {rejected_by} TỪ CHỐI: {reject_reason}"
             is_rejected = True
+            
+            # Ghi nhớ nến này đã bị chặn để không thông báo lại
+            self.last_evaluated_time = last_closed_candle.name
         else:
             # Nếu AI duyệt
             if gemini_failed:
@@ -149,6 +157,9 @@ class StrategyAnalyzer:
             else:
                 ema_trend = f"{ema_trend}\n✅ CẢ 2 LỚP VỆ SĨ (ML & GEMINI) ĐỀU DUYỆT: {ai_verdict.get('reason', 'Đủ an toàn để giao dịch.')}"
             self.last_insight = ema_trend
+            
+            # Ghi nhớ nến này đã được duyệt để không thông báo lại
+            self.last_evaluated_time = last_closed_candle.name
 
         return {
             "signal": signal,

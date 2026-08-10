@@ -72,7 +72,10 @@ class TelegramNotifier:
                 f"🛡️ **{rejected_by.upper()} ĐÃ CHẶN 1 KÈO DỎM** 🛡️\n"
                 f"Cặp giao dịch: {symbol}\n"
                 f"Tín hiệu ban đầu: {signal_data['signal']}\n"
-                f"🎯 **Mức giá Entry hụt:** `{signal_data.get('entry', 'N/A')}`\n\n"
+                f"🎯 **Mức giá Entry hụt:** `{signal_data.get('entry', 'N/A')}`\n"
+                f"🛑 **Mức Cắt Lỗ (SL) hụt:** `{signal_data.get('sl', 'N/A')}`\n"
+                f"💰 **TP 1 hụt:** `{signal_data.get('tp1', 'N/A')}`\n"
+                f"🚀 **TP 2 hụt:** `{signal_data.get('tp2', 'N/A')}`\n\n"
                 f"❌ **Lý do từ chối:** {signal_data.get('reject_reason', '')}\n"
                 f"*(Sếp cứ yên tâm uống cafe, kèo này vào là mất tiền!)*"
             )

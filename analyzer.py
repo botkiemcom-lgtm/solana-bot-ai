@@ -58,9 +58,9 @@ class StrategyAnalyzer:
         ema_50 = last_closed_candle['ema_50']
         prev_ema_50 = prev_candle['ema_50']
         
-        # 2. ĐIỀU KIỆN CŨ: Cross-over EMA 50
-        crossover_up = last_closed_candle['close'] > ema_50 and prev_candle['close'] <= prev_ema_50
-        crossover_down = last_closed_candle['close'] < ema_50 and prev_candle['close'] >= prev_ema_50
+        # 2. ĐIỀU KIỆN MỚI: Bám Trend (Trend Continuation) thay vì Crossover cứng nhắc
+        trend_up = last_closed_candle['close'] > ema_50
+        trend_down = last_closed_candle['close'] < ema_50
         
         # KIỂM TRA BỘ LỌC SIDEWAY (ADX)
         if not pd.isna(adx_val) and adx_val < 10:
@@ -78,18 +78,16 @@ class StrategyAnalyzer:
         is_red = last_closed_candle['close'] < last_closed_candle['open']
 
         # KẾT HỢP
-        if btc_uptrend and crossover_up:
+        if btc_uptrend and trend_up:
             if is_strong_candle and is_green:
                 signal = "LONG"
-                ema_trend = "BULLISH BREAKOUT: Nến Xanh cực mạnh đâm thủng EMA 50, La bàn BTC thuận chiều!"
+                ema_trend = "BULLISH BREAKOUT: Nến Xanh cực mạnh bứt phá trên EMA 50, La bàn BTC thuận chiều!"
             else:
-                self.last_insight = "Phá vỡ EMA 50 lên nhưng Nến lực yếu (Doji/Whipsaw), Hủy lệnh!"
-                return None
-                
-        elif btc_downtrend and crossover_down:
+                self.last_insight = "Đang trong Uptrend, nhưng chờ nến xanh bứt phá mạnh (Đặc ruột > 65%) để lên tàu."
+        elif btc_downtrend and trend_down:
             if is_strong_candle and is_red:
                 signal = "SHORT"
-                ema_trend = "BEARISH BREAKOUT: Nến Đỏ xả mạnh đâm thủng EMA 50, La bàn BTC thuận chiều!"
+                ema_trend = "BEARISH BREAKOUT: Nến Đỏ cực mạnh lao dốc dưới EMA 50, La bàn BTC thuận chiều!"
             else:
                 self.last_insight = "Phá vỡ EMA 50 xuống nhưng Nến lực yếu (Doji/Whipsaw), Hủy lệnh!"
                 return None
@@ -111,19 +109,17 @@ class StrategyAnalyzer:
         rejected_by = ""
         gemini_failed = ai_verdict.get("gemini_failed", False)
         
-        # Mức rủi ro theo ML
+        # Mức rủi ro theo ML (Hệ thống 3 Tầng)
         confidence = ai_verdict.get("confidence", 0)
-        risk_level = "Rủi ro cao"
-        risk_amount = 10.0
         
         if confidence >= 70 and adx_val >= 35:
-            risk_level = 'Cực kỳ ngon'
+            risk_level = 'Hạng 1 (Siêu VIP)'
             risk_amount = 15.0
         elif confidence >= 55 and adx_val >= 25:
-            risk_level = 'Trung bình'
-            risk_amount = 10.0
+            risk_level = 'Hạng 2 (An toàn)'
+            risk_amount = 13.0
         else:
-            risk_level = 'Rủi ro cao'
+            risk_level = 'Hạng 3 (Rủi ro)'
             risk_amount = 10.0
             
         sl_dist = 2.0 * atr_val

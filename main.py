@@ -21,6 +21,9 @@ def keep_alive():
     server = HTTPServer(('0.0.0.0', port), DummyServer)
     server.serve_forever()
 
+# Khởi tạo Analyzer Toàn cục để giữ lại Trí nhớ (last_evaluated_time)
+GLOBAL_ANALYZER = StrategyAnalyzer()
+
 def run_bot_job():
     print("👀 Đang quét dữ liệu SOL/USDT khung 15m (Swing Trading)...")
     vn_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
@@ -28,7 +31,7 @@ def run_bot_job():
     
     # 1. Khởi tạo các module
     fetcher = BinanceFetcher()
-    analyzer = StrategyAnalyzer()
+    analyzer = GLOBAL_ANALYZER
     notifier = TelegramNotifier()
 
     # 2. Lấy dữ liệu đa khung thời gian (5m, 30m, 1h, và BTC 30m)

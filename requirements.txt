@@ -4,7 +4,7 @@ ccxt==4.3.47
 python-telegram-bot==21.3
 python-dotenv==1.0.1
 schedule==1.2.2
-scikit-learn
+scikit-learn==1.9.0
 joblib
 xgboost
 google-generativeai

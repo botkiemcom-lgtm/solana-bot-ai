@@ -49,9 +49,12 @@ class StrategyAnalyzer:
         signal = None
         ema_trend = ""
         
-        # 1. Bộ lọc La Bàn (Xu hướng tổng thể 30m)
-        btc_uptrend = last_closed_candle['close_btc'] > last_closed_candle['btc_ema_50'] if 'close_btc' in df.columns else df_btc.loc[last_closed_candle.name]['close'] > last_closed_candle['btc_ema_50']
-        btc_downtrend = last_closed_candle['close_btc'] < last_closed_candle['btc_ema_50'] if 'close_btc' in df.columns else df_btc.loc[last_closed_candle.name]['close'] < last_closed_candle['btc_ema_50']
+        # 1. Bộ lọc La Bàn (RSI của BTC thay vì EMA)
+        btc_rsi = df_btc.loc[last_closed_candle.name]['rsi'] if 'rsi' in df_btc.columns else 50.0
+        # Đánh LONG thì BTC không được quá nát (RSI > 40)
+        btc_uptrend = btc_rsi > 40.0
+        # Đánh SHORT thì BTC không được quá bullish (RSI < 60)
+        btc_downtrend = btc_rsi < 60.0
 
         rsi_val = last_closed_candle['rsi']
         adx_val = last_closed_candle['adx']
@@ -63,16 +66,16 @@ class StrategyAnalyzer:
         trend_down = last_closed_candle['close'] < ema_50
         
         # KIỂM TRA BỘ LỌC SIDEWAY (ADX)
-        if not pd.isna(adx_val) and adx_val < 10:
-            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} < 10), Hủy lệnh để tránh Whipsaw!"
+        if not pd.isna(adx_val) and adx_val <= 12:
+            self.last_insight = f"Thị trường đang đi ngang (ADX: {adx_val:.1f} <= 12), Hủy lệnh để tránh Whipsaw!"
             return None
         
-        # 3. MÀNG LỌC NẾN SIÊU GỌN (Body > 65%)
+        # 3. MÀNG LỌC NẾN (Body > 45% để lấy được nến Breakout có râu quét thanh khoản)
         candle_body = abs(last_closed_candle['close'] - last_closed_candle['open'])
         candle_range = last_closed_candle['high'] - last_closed_candle['low']
         is_strong_candle = False
         if candle_range > 0:
-            is_strong_candle = (candle_body / candle_range) > 0.65
+            is_strong_candle = (candle_body / candle_range) > 0.45
             
         is_green = last_closed_candle['close'] > last_closed_candle['open']
         is_red = last_closed_candle['close'] < last_closed_candle['open']
@@ -81,18 +84,18 @@ class StrategyAnalyzer:
         if btc_uptrend and trend_up:
             if is_strong_candle and is_green:
                 signal = "LONG"
-                ema_trend = "BULLISH BREAKOUT: Nến Xanh cực mạnh bứt phá trên EMA 50, La bàn BTC thuận chiều!"
+                ema_trend = "BULLISH BREAKOUT: Nến Xanh bứt phá trên EMA 50, La bàn BTC không cản địa (RSI > 40)!"
             else:
-                self.last_insight = "Đang trong Uptrend, nhưng chờ nến xanh bứt phá mạnh (Đặc ruột > 65%) để lên tàu."
+                self.last_insight = "Đang trong Uptrend, nhưng chờ nến xanh bứt phá (Đặc ruột > 45%) để lên tàu."
         elif btc_downtrend and trend_down:
             if is_strong_candle and is_red:
                 signal = "SHORT"
-                ema_trend = "BEARISH BREAKOUT: Nến Đỏ cực mạnh lao dốc dưới EMA 50, La bàn BTC thuận chiều!"
+                ema_trend = "BEARISH BREAKOUT: Nến Đỏ lao dốc dưới EMA 50, La bàn BTC không cản địa (RSI < 60)!"
             else:
                 self.last_insight = "Phá vỡ EMA 50 xuống nhưng Nến lực yếu (Doji/Whipsaw), Hủy lệnh!"
                 return None
         else:
-            self.last_insight = f"Đang theo dõi chặt chẽ (RSI: {rsi_val:.1f})"
+            self.last_insight = f"Đang theo dõi chặt chẽ (RSI BTC: {btc_rsi:.1f})"
             return None
             
         self.last_insight = ema_trend
@@ -222,11 +225,13 @@ class StrategyAnalyzer:
                 confidence = probs[pred] * 100
                 
                 if pred == 0:
-                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Biến động Sideway/Nhiễu loạn, không có xu hướng rõ ràng."}
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Biến động Sideway/Nhiễu loạn, không có xu hướng rõ ràng.", "confidence": confidence}
+                elif confidence < 45.0:
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": f"Tự tin của AI quá thấp ({confidence:.1f}% < 45%). Hủy lệnh để bảo toàn vốn!", "confidence": confidence}
                 elif pred == 1 and current_signal == "SHORT":
-                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Uptrend, đánh SHORT ngược xu hướng rất nguy hiểm!"}
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Uptrend, đánh SHORT ngược xu hướng rất nguy hiểm!", "confidence": confidence}
                 elif pred == 2 and current_signal == "LONG":
-                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Downtrend, đánh LONG ngược xu hướng rất nguy hiểm!"}
+                    return {"approved": False, "rejected_by": "Vệ Sĩ Toán Học (ML)", "reason": "Thị trường đang Downtrend, đánh LONG ngược xu hướng rất nguy hiểm!", "confidence": confidence}
         except Exception as e:
             print(f"Lỗi AI Machine Learning (Risk Manager): {e}")
             # Nếu ML lỗi thì vẫn đi tiếp tới Gemini

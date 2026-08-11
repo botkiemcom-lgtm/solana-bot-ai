@@ -87,6 +87,7 @@ class StrategyAnalyzer:
                 ema_trend = "BULLISH BREAKOUT: Nến Xanh bứt phá trên EMA 50, La bàn BTC không cản địa (RSI > 40)!"
             else:
                 self.last_insight = "Đang trong Uptrend, nhưng chờ nến xanh bứt phá (Đặc ruột > 45%) để lên tàu."
+                return None
         elif btc_downtrend and trend_down:
             if is_strong_candle and is_red:
                 signal = "SHORT"

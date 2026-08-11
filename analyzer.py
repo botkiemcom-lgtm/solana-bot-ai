@@ -179,10 +179,105 @@ class StrategyAnalyzer:
 
     def monitor_trade(self, df_5m, df_15m, df_1h, df_btc_15m, active_trade):
         """
-        Tạm thời tắt AI cảnh báo thoát sớm vì chúng ta đã dùng Trailing Stop của sàn Binance.
-        Hàm này giữ nguyên cấu trúc để main.py không bị lỗi.
+        LỚP BẢO VỆ 1: Siêu Máy Tính ML Gác Đêm (Rule-based)
+        Nếu phát hiện rủi ro (Ngâm lệnh hoặc Xả ngược) -> Gọi LỚP BẢO VỆ 2: Gemini
         """
-        return None
+        if df_15m is None or len(df_15m) < 20: return None
+        
+        import datetime
+        import pandas as pd
+        import os
+        import json
+        import google.generativeai as genai
+        
+        trade_type = active_trade.get("type")
+        entry_time = active_trade.get("entry_time")
+        if not trade_type or not entry_time: return None
+        
+        df = df_15m.copy()
+        
+        # Tính toán các chỉ báo cơ bản
+        df['ema_21'] = ta.trend.ema_indicator(df['close'], window=21)
+        df['rsi'] = ta.momentum.rsi(df['close'], window=14)
+        df['vol_ma20'] = df['volume'].rolling(20).mean()
+        
+        last = df.iloc[-2] # Cây nến M15 vừa đóng cửa
+        
+        # ==========================================
+        # ĐIỀU KIỆN 1: NGÂM LỆNH (Trôi qua > 6 cây nến tức 90 phút)
+        # ==========================================
+        now = datetime.datetime.utcnow()
+        time_elapsed = (now - entry_time).total_seconds() / 60
+        # CHỈ báo động 1 lần duy nhất ở cột mốc 90 phút (Tránh spam API mỗi 15p)
+        is_stuck = 90 <= time_elapsed < 105
+        
+        # ==========================================
+        # ĐIỀU KIỆN 2: XẢ NGƯỢC (Volume x2 + Đâm thủng EMA 21)
+        # ==========================================
+        candle_body = abs(last['close'] - last['open'])
+        candle_range = last['high'] - last['low']
+        body_ratio = candle_body / candle_range if candle_range > 0 else 0
+        
+        vol_spike = last['volume'] > (last['vol_ma20'] * 2.0)
+        strong_body = body_ratio > 0.6
+        
+        is_reversal = False
+        if trade_type == "LONG":
+            # Nến Đỏ dài, xả volume mạnh, đâm thủng EMA 21
+            if last['close'] < last['open'] and strong_body and vol_spike and last['close'] < last['ema_21']:
+                is_reversal = True
+        elif trade_type == "SHORT":
+            # Nến Xanh dài, volume mạnh, vọt qua EMA 21
+            if last['close'] > last['open'] and strong_body and vol_spike and last['close'] > last['ema_21']:
+                is_reversal = True
+                
+        # NẾU KHÔNG CÓ BIẾN -> TÍẾP TỤC GÁC
+        if not is_stuck and not is_reversal:
+            return None
+            
+        reason_ml = "Ngâm lệnh quá 90 phút" if is_stuck else "Phát hiện nến xả ngược Volume x2"
+        print(f"⚠️ Vệ Sĩ ML Báo Động: {reason_ml}. Đang gọi Gemini hội chẩn...")
+        
+        # ==========================================
+        # HỘI CHẨN KHẨN CẤP: GEMINI AI
+        # ==========================================
+        try:
+            genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+            model = genai.GenerativeModel('gemini-flash-latest')
+            
+            recent_df = df.tail(10).copy()
+            data_str = "Dữ liệu 10 nến 15m gần nhất (Mở, Cao, Thấp, Đóng, Volume, RSI, EMA21):\n"
+            for index, row in recent_df.iterrows():
+                rsi_v = row['rsi'] if 'rsi' in row and not pd.isna(row['rsi']) else 50.0
+                ema_v = row['ema_21'] if 'ema_21' in row and not pd.isna(row['ema_21']) else row['close']
+                data_str += f"- Close: {row['close']:.2f}, Vol: {row['volume']:.2f}, RSI: {rsi_v:.1f}, EMA21: {ema_v:.2f}\n"
+                
+            prompt = f"""
+            TÔI ĐANG ÔM LỆNH: {trade_type}
+            Vệ Sĩ Toán Học vừa cảnh báo: {reason_ml}.
+            Dựa vào 10 cây nến gần nhất dưới đây, hãy đánh giá KHẨN CẤP:
+            Cú giật giá này (hoặc sự đi ngang này) có phải là Đảo Chiều Thật Sự phá hỏng xu hướng không? 
+            Có nên thoát lệnh ngay lập tức để bảo toàn vốn, hay chỉ là bẫy rũ bỏ (Fakeout)?
+            
+            BẮT BUỘC trả về ĐÚNG định dạng JSON như sau, không kèm bất kỳ văn bản nào khác:
+            {{"close_trade_now": true_or_false, "reason": "Lý do ngắn gọn bằng tiếng Việt"}}
+            
+            {data_str}
+            """
+            
+            response = model.generate_content(prompt)
+            res_text = response.text.replace("```json", "").replace("```", "").strip()
+            res_json = json.loads(res_text)
+            
+            if res_json.get('close_trade_now', False):
+                return f"🚨 **CẢNH BÁO TỪ GEMINI:**\n\"{res_json.get('reason', 'Đảo chiều nguy hiểm')}\"\n\n👉 **Đây là pha đảo chiều thật sự, Sếp bấm nút [Dừng lệnh] ngay để bảo toàn vốn!**"
+            else:
+                print(f"✅ Gemini trấn an: {res_json.get('reason')} -> Tiếp tục giữ lệnh.")
+                return None
+                
+        except Exception as e:
+            print(f"Lỗi gọi Gemini (Hội chẩn khẩn cấp): {e}")
+            return None
 
     def ask_ai_risk_manager(self, df, current_signal):
         import os

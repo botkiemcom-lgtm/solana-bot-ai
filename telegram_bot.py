@@ -242,6 +242,8 @@ class TelegramNotifier:
                             if str(chat_id) in ACTIVE_USERS:
                                 ACTIVE_USERS[str(chat_id)]["in_position"] = True
                                 ACTIVE_USERS[str(chat_id)]["type"] = trade_type
+                                import datetime
+                                ACTIVE_USERS[str(chat_id)]["entry_time"] = datetime.datetime.utcnow()
                             
                             new_text = original_text + f"\n\n🛡️ **CHẾ ĐỘ BẢO VỆ: ĐANG BẬT ({trade_type})**\n_Bot đang theo dõi sát sao thị trường để bảo vệ vốn..._"
                             new_markup = {
@@ -258,6 +260,7 @@ class TelegramNotifier:
                             if str(chat_id) in ACTIVE_USERS:
                                 ACTIVE_USERS[str(chat_id)]["in_position"] = False
                                 ACTIVE_USERS[str(chat_id)]["type"] = None
+                                ACTIVE_USERS[str(chat_id)]["entry_time"] = None
                             
                             # Xóa đoạn text Bảo Vệ Đang Bật
                             if "🛡️" in original_text:

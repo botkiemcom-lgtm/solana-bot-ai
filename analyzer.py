@@ -178,21 +178,17 @@ class StrategyAnalyzer:
         }
 
     def monitor_trade(self, df_5m, df_15m, df_1h, df_btc_15m, active_trade):
-        """
-        LỚP BẢO VỆ 1: Siêu Máy Tính ML Gác Đêm (Rule-based)
-        Nếu phát hiện rủi ro (Ngâm lệnh hoặc Xả ngược) -> Gọi LỚP BẢO VỆ 2: Gemini
-        """
-        if df_15m is None or len(df_15m) < 20: return None
-        
         import datetime
-        import pandas as pd
-        import os
         import json
         import google.generativeai as genai
         
         trade_type = active_trade.get("type")
         entry_time = active_trade.get("entry_time")
         if not trade_type or not entry_time: return None
+        
+        entry_price = active_trade.get("entry_price")
+        sl = active_trade.get("sl")
+        tp1 = active_trade.get("tp1")
         
         df = df_15m.copy()
         
@@ -202,17 +198,60 @@ class StrategyAnalyzer:
         df['vol_ma20'] = df['volume'].rolling(20).mean()
         
         last = df.iloc[-2] # Cây nến M15 vừa đóng cửa
+        current_price = last['close']
         
+        # Tính Unrealized PnL và Distance to SL
+        unrealized_pnl = 0.0
+        dist_to_sl = 0.0
+        if entry_price and sl:
+            if trade_type == "LONG":
+                unrealized_pnl = (current_price - entry_price) / entry_price * 100
+                dist_to_sl = (current_price - sl) / current_price * 100
+            elif trade_type == "SHORT":
+                unrealized_pnl = (entry_price - current_price) / entry_price * 100
+                dist_to_sl = (sl - current_price) / current_price * 100
+                
+        # TÌM SUPPORT / RESISTANCE H1 BẰNG FRACTAL (SWING LOW/HIGH)
+        support_h1 = "Chưa xác định"
+        resistance_h1 = "Chưa xác định"
+        h1_trend = "Chưa xác định"
+        if df_1h is not None and len(df_1h) >= 72:
+            df_1h_recent = df_1h.tail(72).copy()
+            import ta
+            df_1h_recent['ema_50'] = ta.trend.ema_indicator(df_1h_recent['close'], window=50)
+            if df_1h_recent['ema_50'].iloc[-1] > df_1h_recent['ema_50'].iloc[-5]:
+                h1_trend = "TĂNG"
+            else:
+                h1_trend = "GIẢM"
+            
+            # Fractal logic
+            swing_highs = []
+            swing_lows = []
+            for i in range(2, len(df_1h_recent) - 2):
+                h = df_1h_recent['high'].iloc[i]
+                l = df_1h_recent['low'].iloc[i]
+                if h > df_1h_recent['high'].iloc[i-1] and h > df_1h_recent['high'].iloc[i-2] and h > df_1h_recent['high'].iloc[i+1] and h > df_1h_recent['high'].iloc[i+2]:
+                    swing_highs.append(h)
+                if l < df_1h_recent['low'].iloc[i-1] and l < df_1h_recent['low'].iloc[i-2] and l < df_1h_recent['low'].iloc[i+1] and l < df_1h_recent['low'].iloc[i+2]:
+                    swing_lows.append(l)
+            
+            # Tìm cản gần nhất
+            valid_supports = [s for s in swing_lows if s < current_price]
+            valid_resistances = [r for r in swing_highs if r > current_price]
+            
+            if valid_supports: support_h1 = f"{max(valid_supports):.2f}"
+            if valid_resistances: resistance_h1 = f"{min(valid_resistances):.2f}"
+            
         # ==========================================
-        # ĐIỀU KIỆN 1: NGÂM LỆNH (Trôi qua > 6 cây nến tức 90 phút)
+        # ĐIỀU KIỆN 1: NGÂM LỆNH (Trôi qua >= 90 phút)
         # ==========================================
         now = datetime.datetime.utcnow()
         time_elapsed = (now - entry_time).total_seconds() / 60
-        # CHỈ báo động 1 lần duy nhất ở cột mốc 90 phút (Tránh spam API mỗi 15p)
-        is_stuck = 90 <= time_elapsed < 105
+        # Vòng lặp: Bắt đầu từ phút 90, cứ mỗi 30 phút kiểm tra 1 lần (modulo)
+        is_stuck = time_elapsed >= 90 and ((int(time_elapsed) - 90) % 30) < 5
         
         # ==========================================
-        # ĐIỀU KIỆN 2: XẢ NGƯỢC (Volume x2 + Đâm thủng EMA 21)
+        # ĐIỀU KIỆN 2: XẢ NGƯỢC (Volume x2) + CƯA CHÂN BÀN
         # ==========================================
         candle_body = abs(last['close'] - last['open'])
         candle_range = last['high'] - last['low']
@@ -221,22 +260,39 @@ class StrategyAnalyzer:
         vol_spike = last['volume'] > (last['vol_ma20'] * 2.0)
         strong_body = body_ratio > 0.6
         
+        # Logic Cưa chân bàn (3 nến liên tiếp ngược hướng + biến động > 1.2%)
+        is_bleeding = False
+        if len(df) >= 4:
+            last_3 = df.tail(4).head(3) # Bỏ cây nến đang chạy, lấy 3 cây vừa đóng
+            if trade_type == "LONG":
+                is_all_red = all(row['close'] < row['open'] for _, row in last_3.iterrows())
+                total_drop = (last_3.iloc[0]['open'] - last_3.iloc[-1]['close']) / last_3.iloc[0]['open'] * 100
+                if is_all_red and total_drop > 1.2:
+                    is_bleeding = True
+            elif trade_type == "SHORT":
+                is_all_green = all(row['close'] > row['open'] for _, row in last_3.iterrows())
+                total_rise = (last_3.iloc[-1]['close'] - last_3.iloc[0]['open']) / last_3.iloc[0]['open'] * 100
+                if is_all_green and total_rise > 1.2:
+                    is_bleeding = True
+        
         is_reversal = False
         if trade_type == "LONG":
-            # Nến Đỏ dài, xả volume mạnh, đâm thủng EMA 21
             if last['close'] < last['open'] and strong_body and vol_spike and last['close'] < last['ema_21']:
                 is_reversal = True
         elif trade_type == "SHORT":
-            # Nến Xanh dài, volume mạnh, vọt qua EMA 21
             if last['close'] > last['open'] and strong_body and vol_spike and last['close'] > last['ema_21']:
                 is_reversal = True
                 
         # NẾU KHÔNG CÓ BIẾN -> TÍẾP TỤC GÁC
-        if not is_stuck and not is_reversal:
+        if not is_stuck and not is_reversal and not is_bleeding:
             return None
             
-        reason_ml = "Ngâm lệnh quá 90 phút" if is_stuck else "Phát hiện nến xả ngược Volume x2"
-        print(f"⚠️ Vệ Sĩ ML Báo Động: {reason_ml}. Đang gọi Gemini hội chẩn...")
+        reason_ml = ""
+        if is_stuck: reason_ml = f"Ngâm lệnh quá {int(time_elapsed)} phút, Momentum suy yếu."
+        if is_reversal: reason_ml = "Phát hiện nến xả ngược bạo lực (Volume x2, xuyên thủng EMA21)."
+        if is_bleeding: reason_ml = "Bị cưa chân bàn rỉ máu: 3 nến liên tiếp đi ngược hướng > 1.2%."
+        
+        print(f"⚠️ Vệ Sĩ ML Báo Động: {reason_ml} Đang gọi Gemini hội chẩn...")
         
         # ==========================================
         # HỘI CHẨN KHẨN CẤP: GEMINI AI
@@ -254,10 +310,19 @@ class StrategyAnalyzer:
                 
             prompt = f"""
             TÔI ĐANG ÔM LỆNH: {trade_type}
-            Vệ Sĩ Toán Học vừa cảnh báo: {reason_ml}.
-            Dựa vào 10 cây nến gần nhất dưới đây, hãy đánh giá KHẨN CẤP:
-            Cú giật giá này (hoặc sự đi ngang này) có phải là Đảo Chiều Thật Sự phá hỏng xu hướng không? 
+            - Entry Price: {entry_price if entry_price else 'Không rõ'}
+            - Lãi/Lỗ hiện tại (Unrealized PnL): {unrealized_pnl:.2f}%
+            - Khoảng cách đến Stoploss: {dist_to_sl:.2f}%
+            - Kháng Cự H1 (Gần nhất): {resistance_h1}
+            - Hỗ Trợ H1 (Gần nhất): {support_h1}
+            - Xu Hướng H1: {h1_trend}
+            
+            Vệ Sĩ Toán Học vừa cảnh báo: {reason_ml}
+            
+            Dựa vào thông tin trên và 10 cây nến gần nhất dưới đây, hãy đánh giá KHẨN CẤP:
+            Đây có phải là Đảo Chiều Thật Sự phá hỏng xu hướng không? 
             Có nên thoát lệnh ngay lập tức để bảo toàn vốn, hay chỉ là bẫy rũ bỏ (Fakeout)?
+            (Lưu ý đối chiếu giá hiện tại với Kháng cự/Hỗ trợ H1 để xem giá đã phá vỡ cản cứng chưa).
             
             BẮT BUỘC trả về ĐÚNG định dạng JSON như sau, không kèm bất kỳ văn bản nào khác:
             {{"close_trade_now": true_or_false, "reason": "Lý do ngắn gọn bằng tiếng Việt"}}

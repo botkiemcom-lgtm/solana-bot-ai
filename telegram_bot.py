@@ -238,12 +238,32 @@ class TelegramNotifier:
                         
                         if data.startswith("ENTERED_"):
                             trade_type = data.split("_")[1]
+                            
+                            import re
+                            entry_price, sl, tp1, tp2 = None, None, None, None
+                            try:
+                                m_entry = re.search(r'Vùng Vào Lệnh:\s*([\d.]+)', original_text)
+                                m_sl = re.search(r'Mức Cắt Lỗ.*:\s*([\d.]+)', original_text)
+                                m_tp1 = re.search(r'TP 1.*:\s*([\d.]+)', original_text)
+                                m_tp2 = re.search(r'TP 2.*:\s*([\d.]+)', original_text)
+                                
+                                if m_entry: entry_price = float(m_entry.group(1))
+                                if m_sl: sl = float(m_sl.group(1))
+                                if m_tp1: tp1 = float(m_tp1.group(1))
+                                if m_tp2: tp2 = float(m_tp2.group(1))
+                            except Exception as e:
+                                print(f"Lỗi Regex bóc tách giá: {e}")
+                                
                             # Cập nhật trạng thái riêng của người bấm sang ĐANG GỒNG LỆNH
                             if str(chat_id) in ACTIVE_USERS:
                                 ACTIVE_USERS[str(chat_id)]["in_position"] = True
                                 ACTIVE_USERS[str(chat_id)]["type"] = trade_type
                                 import datetime
                                 ACTIVE_USERS[str(chat_id)]["entry_time"] = datetime.datetime.utcnow()
+                                ACTIVE_USERS[str(chat_id)]["entry_price"] = entry_price
+                                ACTIVE_USERS[str(chat_id)]["sl"] = sl
+                                ACTIVE_USERS[str(chat_id)]["tp1"] = tp1
+                                ACTIVE_USERS[str(chat_id)]["tp2"] = tp2
                             
                             new_text = original_text + f"\n\n🛡️ **CHẾ ĐỘ BẢO VỆ: ĐANG BẬT ({trade_type})**\n_Bot đang theo dõi sát sao thị trường để bảo vệ vốn..._"
                             new_markup = {

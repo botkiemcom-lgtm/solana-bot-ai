@@ -218,7 +218,6 @@ class StrategyAnalyzer:
 
         self.last_closed_evaluated = None
         self.last_watch_candle = None
-        self.last_watch_direction = None
         self.last_insight = "Chưa có dữ liệu"
         self.last_watch = None
 
@@ -683,10 +682,12 @@ Trả về JSON duy nhất:
             idx = len(df) - 2
             last_closed = df.iloc[idx]
 
-            # Mỗi nến 15m chỉ đánh giá một lần.
+            # KIỂM TRA KHÓA TIMESTAMP (CONFIRMED)
+            # Nếu cây nến M15 này ĐÃ TỪNG XỬ LÝ -> Bỏ qua ngay lập tức
             if self.last_closed_evaluated == last_closed["timestamp"]:
                 return None
 
+            # Nếu CHƯA XỬ LÝ -> Đánh dấu Khóa Timestamp
             self.last_closed_evaluated = last_closed["timestamp"]
 
             detected = self.detect_direction(df, idx)
@@ -844,15 +845,14 @@ Trả về JSON duy nhất:
 
             candle_time = current["timestamp"]
 
-            # Không spam cùng một hướng trong cùng một nến.
-            if (
-                self.last_watch_candle == candle_time
-                and self.last_watch_direction == direction
-            ):
+            # KIỂM TRA KHÓA TIMESTAMP (LIVE WATCH)
+            # Mỗi cây nến 15m CHỈ ĐƯỢC BẮN TỐI ĐA 1 TIN NHẮN WATCH ĐẦU TIÊN
+            # Sau đó phải im lặng hoàn toàn cho đến khi nến đóng cửa
+            if self.last_watch_candle == candle_time:
                 return None
 
+            # Đánh dấu Khóa Timestamp cho cây nến đang chạy
             self.last_watch_candle = candle_time
-            self.last_watch_direction = direction
 
             self.last_watch = {
                 "signal": direction,
